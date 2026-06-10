@@ -1,13 +1,12 @@
 import { UserProfile, DaySchedule, AttachedFile } from './types';
 
 export const DEFAULT_USERS: UserProfile[] = [
-  { id: 'as', name: 'AS', fullName: 'ดร. อภิสิทธิ์ (AS)', role: 'executive', avatarColor: '#f87171' },
-  { id: 'sc', name: 'SC', fullName: 'ผศ.ดร. สุรชัย (SC)', role: 'executive', avatarColor: '#fb923c' },
-  { id: 'tw', name: 'TW', fullName: 'รศ. ธวัชชัย (TW)', role: 'executive', avatarColor: '#facc15' },
-  { id: 'jk', name: 'JK', fullName: 'ดร. จักรินทร์ (JK)', role: 'executive', avatarColor: '#4ade80' },
-  { id: 'pk', name: 'PK', fullName: 'ผศ. ปริญญา (PK)', role: 'executive', avatarColor: '#38bdf8' },
-  { id: 'team', name: 'ทีม วก', fullName: 'ทีมคณะทำงาน วก.', role: 'executive', avatarColor: '#c084fc' },
-  { id: 'secretary', name: 'เลขา (SEC)', fullName: 'เบญญพร (เลขาธิการ)', role: 'secretary', avatarColor: '#f43f5e' }
+  { id: 'as', name: 'AS', fullName: 'ผศ.ดร.อรรยา (AS)', role: 'executive', avatarColor: '#f87171' },
+  { id: 'sc', name: 'SC', fullName: 'รศ.ดร.ศุภเจตน์ (SC)', role: 'executive', avatarColor: '#fb923c' },
+  { id: 'tw', name: 'TW', fullName: 'ดร.ถิรพล (TW)', role: 'executive', avatarColor: '#facc15' },
+  { id: 'jk', name: 'JK', fullName: 'ดร.จิราพร (JK)', role: 'executive', avatarColor: '#4ade80' },
+  { id: 'pk', name: 'PK', fullName: 'ดร.พีรชัย (PK)', role: 'executive', avatarColor: '#38bdf8' },
+  { id: 'team', name: 'ทีม วก', fullName: 'ทีมคณะทำงาน วก.', role: 'executive', avatarColor: '#c084fc' }
 ];
 
 // Seed some data in August 2026 (สิงหาคม 2569 - Buddhist Era)

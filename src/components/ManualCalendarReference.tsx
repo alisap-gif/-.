@@ -157,21 +157,19 @@ export function ManualCalendarReference({
                       </span>
                     </div>
                   </div>
-                  {userRole === 'secretary' && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRemoveFile(file.id);
-                        if (selectedFile?.id === file.id) {
-                          setSelectedFile(attachedFiles.find(f => f.id !== file.id) || null);
-                        }
-                      }}
-                      className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 transition-colors shrink-0"
-                      title="ลบไฟล์แนบ"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemoveFile(file.id);
+                      if (selectedFile?.id === file.id) {
+                        setSelectedFile(attachedFiles.find(f => f.id !== file.id) || null);
+                      }
+                    }}
+                    className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 transition-colors shrink-0"
+                    title="ลบไฟล์แนบ"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               );
             })}
@@ -246,7 +244,7 @@ export function ManualCalendarReference({
                       <th className="py-2.5 px-3">วันและกำหนดการ</th>
                       <th className="py-2.5 px-3">ช่วงเวลา</th>
                       <th className="py-2.5 px-3">สถานที่จัดงาน</th>
-                      {userRole === 'secretary' && <th className="py-2.5 px-3 text-center">จัดการ</th>}
+                      <th className="py-2.5 px-3 text-center">จัดการ</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -260,29 +258,26 @@ export function ManualCalendarReference({
                         </td>
                         <td className="py-2.5 px-3 font-mono">{row.time}</td>
                         <td className="py-2.5 px-3 font-semibold text-slate-500">{row.room}</td>
-                        {userRole === 'secretary' && (
-                          <td className="py-2.5 px-3 text-center">
-                            <button
-                              onClick={() => handleRemoveRow(row.id)}
-                              className="p-1 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-all duration-200"
-                              title="ลบแถวการประชุม"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        )}
+                        <td className="py-2.5 px-3 text-center">
+                          <button
+                            onClick={() => handleRemoveRow(row.id)}
+                            className="p-1 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-all duration-200"
+                            title="ลบแถวการประชุม"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
 
-                {/* Live Form for Secretaries to add schedules directly reference inside table */}
-                {userRole === 'secretary' && (
-                  <form onSubmit={handleAddRow} className="mt-5 p-4 bg-white rounded-xl border border-slate-200/80">
-                    <p className="text-[11px] font-bold text-slate-700 mb-2.5 flex items-center gap-1.5 font-display">
-                      <Plus className="w-3.5 h-3.5 text-indigo-600 animate-none" />
-                      เพิ่มวาระการจัดประชุมลงในเอกสารแนบหลัก (สำหรับเลขา วก. เท่านั้น)
-                    </p>
+                {/* Live Form to add schedules directly reference inside table */}
+                <form onSubmit={handleAddRow} className="mt-5 p-4 bg-white rounded-xl border border-slate-200/80">
+                  <p className="text-[11px] font-bold text-slate-700 mb-2.5 flex items-center gap-1.5 font-display">
+                    <Plus className="w-3.5 h-3.5 text-indigo-600 animate-none" />
+                    ระบุกิจกรรมและเวลาลงในตารางกริดอ้างอิงกำหนดการร่วม วก.
+                  </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
                       <input
                         type="text"
@@ -325,9 +320,8 @@ export function ManualCalendarReference({
                       </button>
                     </div>
                   </form>
-                )}
+                </div>
               </div>
-            </div>
           ) : (
             <div className="flex flex-col items-center justify-center p-12 text-slate-400 border border-slate-200 rounded-lg">
               <AlertCircle className="w-8 h-8 text-slate-300 mb-2 animate-none" />

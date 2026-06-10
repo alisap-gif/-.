@@ -21,7 +21,9 @@ import {
   TrendingUp,
   Sliders,
   FileSpreadsheet,
-  Database
+  Database,
+  Table,
+  Edit
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -91,6 +93,8 @@ export default function App() {
   const [isLocked, setIsLocked] = useState(false); // Time-based integrity simulation lock
   const [auditLogs, setAuditLogs] = useState<string[]>(['[ระบบ] เริ่มต้นเซสชันความปลอดภัยเชิงเวลาสำเร็จ']);
   const [tempNoteInputs, setTempNoteInputs] = useState<{ [hour: string]: string }>({});
+  const [dashboardViewMode, setDashboardViewMode] = useState<'cards' | 'grid'>('grid');
+  const [editingCell, setEditingCell] = useState<{ hour: string; userId: string } | null>(null);
   
   // Real Firebase User & Status State
   const [fbUser, setFbUser] = useState<any>(null);
@@ -127,6 +131,7 @@ export default function App() {
 
   // 3. Listen to Day Schedules updates on Firestore with fallbacks
   useEffect(() => {
+    if (!fbUser) return;
     const unsub = onSnapshot(collection(db, 'schedules'), (snapshot) => {
       const dbSchedules: DaySchedule[] = [];
       snapshot.forEach(docSnap => {
@@ -139,10 +144,11 @@ export default function App() {
       handleFirestoreError(error, OperationType.LIST, 'schedules');
     });
     return () => unsub();
-  }, []);
+  }, [fbUser]);
 
   // 4. Listen to Attached Files updates on Firestore
   useEffect(() => {
+    if (!fbUser) return;
     const unsub = onSnapshot(collection(db, 'attachedFiles'), (snapshot) => {
       const dbFiles: AttachedFile[] = [];
       snapshot.forEach(docSnap => {
@@ -155,10 +161,11 @@ export default function App() {
       handleFirestoreError(error, OperationType.LIST, 'attachedFiles');
     });
     return () => unsub();
-  }, []);
+  }, [fbUser]);
 
   // 5. Listen to dynamic Primary GAS configuration URL
   useEffect(() => {
+    if (!fbUser) return;
     const unsub = onSnapshot(doc(db, 'gasConfig', 'primary'), (docSnap) => {
       if (docSnap.exists()) {
         setGasUrl(docSnap.data().gasUrl || '');
@@ -167,7 +174,7 @@ export default function App() {
       handleFirestoreError(error, OperationType.GET, 'gasConfig/primary');
     });
     return () => unsub();
-  }, []);
+  }, [fbUser]);
 
   // Update clock
   useEffect(() => {
@@ -243,10 +250,12 @@ export default function App() {
       addAuditLog(`ผู้ใช้ ${currentUser.name} อัปเดตช่วง ${hour} เป็น [${formattedStatus}] หมายเหตุ: "${targetNote}"`);
 
       // 6. Persist directly to Firebase Firestore with custom safety wrappers
-      setDoc(doc(db, 'schedules', selectedDateString), day)
-        .catch(err => {
-          handleFirestoreError(err, OperationType.UPDATE, `schedules/${selectedDateString}`);
-        });
+      if (fbUser) {
+        setDoc(doc(db, 'schedules', selectedDateString), day)
+          .catch(err => {
+            handleFirestoreError(err, OperationType.UPDATE, `schedules/${selectedDateString}`);
+          });
+      }
 
       return updated;
     });
@@ -352,8 +361,10 @@ export default function App() {
       updated[dayIndex] = day;
 
       // Persist simulation data to Firestore
-      setDoc(doc(db, 'schedules', selectedDateString), day)
-        .catch(err => handleFirestoreError(err, OperationType.UPDATE, `schedules/${selectedDateString}`));
+      if (fbUser) {
+        setDoc(doc(db, 'schedules', selectedDateString), day)
+          .catch(err => handleFirestoreError(err, OperationType.UPDATE, `schedules/${selectedDateString}`));
+      }
 
       return updated;
     });
@@ -405,10 +416,12 @@ export default function App() {
     addAuditLog(`📁 เพิ่มไฟล์แนบใหม่สำเร็จ: "${file.name}"`);
 
     // Write file to Firestore
-    try {
-      await setDoc(doc(db, 'attachedFiles', file.id), file);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, `attachedFiles/${file.id}`);
+    if (fbUser) {
+      try {
+        await setDoc(doc(db, 'attachedFiles', file.id), file);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.CREATE, `attachedFiles/${file.id}`);
+      }
     }
   };
 
@@ -417,10 +430,12 @@ export default function App() {
     addAuditLog(`🗑️ ลบไฟล์แนบออกจากระบบ`);
 
     // Delete file from Firestore
-    try {
-      await deleteDoc(doc(db, 'attachedFiles', id));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `attachedFiles/${id}`);
+    if (fbUser) {
+      try {
+        await deleteDoc(doc(db, 'attachedFiles', id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `attachedFiles/${id}`);
+      }
     }
   };
 
@@ -532,7 +547,7 @@ export default function App() {
                 <span className="text-indigo-200 font-bold border-b-2 border-indigo-500 pb-0.5">{currentUser.fullName}</span>
               </h2>
               <p className="text-xs text-slate-400 mt-1.5 leading-relaxed font-sans max-w-xl">
-                คลิกสัญลักษณ์ด้านขวาเพื่อสวิตช์ผู้บริหารระบบ (จำลองพฤติกรรมเจ้าหน้าที่ วก. แต่ละท่านเข้ามาลงเวลากำหนดการ) หรือเปลี่ยนเป็น 'เลขา' เพื่อทดสอบสิทธิ์แก้ไขทับซ้อน
+                คลิกสัญลักษณ์ด้านขวาเพื่อสวิตช์ผู้บริหารระบบ (จำลองพฤติกรรมเจ้าหน้าที่ วก. แต่ละท่านเข้ามาลงเวลากำหนดการ)
               </p>
             </div>
 
@@ -819,23 +834,293 @@ export default function App() {
               
               <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-sm">
                 <div className="pb-3 border-b border-slate-100 mb-4 font-sans">
-                  <span className="text-[10px] font-bold uppercase text-indigo-700 bg-indigo-50 py-1 px-3 rounded-full border border-indigo-100/60 font-display">
-                    ขั้นตอน 3.2 - 3.5: จัดการช่วงโอกาสเวลา
-                  </span>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="text-[10px] font-bold uppercase text-indigo-700 bg-indigo-50 py-1 px-3 rounded-full border border-indigo-100/60 font-display">
+                      ขั้นตอน 3.2 - 3.5: จัดการช่วงโอกาสเวลา
+                    </span>
+                    
+                    {/* Dynamic View Selector */}
+                    <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/60 scale-95 origin-right shrink-0">
+                      <button
+                        onClick={() => {
+                          setDashboardViewMode('grid');
+                        }}
+                        className={`py-1.5 px-3 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer focus:outline-none ${
+                          dashboardViewMode === 'grid'
+                            ? 'bg-white text-indigo-700 shadow-xs border border-slate-200/50 font-bold'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                        title="แก้ไขและระบุกิจกรรมผู้บริหารทุกคนสะดวกรวดเร็วในตารางกริด"
+                      >
+                        <Table className="w-3 h-3" />
+                        <span>ตารางกริด (Grid Map)</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setDashboardViewMode('cards');
+                        }}
+                        className={`py-1.5 px-3 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer focus:outline-none ${
+                          dashboardViewMode === 'cards'
+                            ? 'bg-white text-indigo-700 shadow-xs border border-slate-200/50 font-bold'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                        title="ดูและแก้ไขแบบทีละชั่วโมงละเอียด"
+                      >
+                        <Clock className="w-3 h-3" />
+                        <span>การ์ดช่วงเวลา (Cards)</span>
+                      </button>
+                    </div>
+                  </div>
                   <h3 className="text-base font-bold text-slate-900 mt-2.5 flex items-center gap-1.5 font-display">
                     <Clock className="w-4.5 h-4.5 text-indigo-600" />
                     วันที่ {new Date(selectedDateString).toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long' })}
                   </h3>
                   <p className="text-xs text-slate-500 mt-1">
-                    สำหรับผู้บริหาร: <span className="font-bold text-slate-800">{currentUser.fullName}</span> สามารถแก้ไข ขีดทับ หรือล้างช่องตารางเวลาได้โดยตรง
+                    {dashboardViewMode === 'grid' 
+                      ? '💡 เคล็ดลับ: คลิกช่อง (Cell) ทับตรงชื่อผู้บริหารในเวลาใดก็ได้เพื่อ ระบุกิจกรรมและเวลา ลงในตารางกริด' 
+                      : `สำหรับผู้บริหาร: ${currentUser.fullName} สามารถแก้ไข ขีดทับ หรือล้างตารางเวลาช่องนี้`
+                    }
                   </p>
                 </div>
 
-                {/* Hourly Slots List */}
-                <div className="space-y-4">
-                  {HOURLY_SLOTS.map((hour) => {
-                    const daySched = getDaySchedule(selectedDateString);
-                    const avails = daySched.slots[hour] || [];
+                {dashboardViewMode === 'grid' ? (
+                  <div className="space-y-4">
+                    {/* Live grid comparison board */}
+                    <div className="overflow-x-auto rounded-xl border border-slate-250/70 bg-white shadow-inner max-h-[500px] overflow-y-auto">
+                      <table className="min-w-full text-xs text-left border-collapse relative">
+                        <thead className="bg-slate-50/90 border-b border-slate-200 text-slate-500 font-bold uppercase font-display sticky top-0 z-20 backdrop-blur-xs">
+                          <tr>
+                            <th className="py-2.5 px-3 text-slate-600 sticky left-0 bg-slate-100/90 z-25 w-24 border-r border-slate-200">
+                              ช่องเวลา
+                            </th>
+                            {DEFAULT_USERS.map((user) => (
+                              <th key={user.id} className="py-2.5 px-3 text-center min-w-[95px] border-r border-slate-200">
+                                <span className="text-[11px] font-bold text-slate-755 truncate block" title={user.fullName}>
+                                  {user.name}
+                                </span>
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {HOURLY_SLOTS.map((hour) => {
+                            const daySched = getDaySchedule(selectedDateString);
+                            const avails = daySched.slots[hour] || [];
+
+                            return (
+                              <tr key={hour} className="hover:bg-slate-50/50 transition-colors">
+                                {/* Time row header */}
+                                <td className="py-2.5 px-2 font-mono font-semibold text-slate-700 bg-slate-50 sticky left-0 z-10 border-r border-slate-200 flex items-center justify-between gap-1 h-12">
+                                  <span>{hour} น.</span>
+                                </td>
+
+                                {/* Cells */}
+                                {DEFAULT_USERS.map((user) => {
+                                  const uAv = avails.find(a => a.userId === user.id);
+                                  const isSelectedToEdit = editingCell?.hour === hour && editingCell?.userId === user.id;
+
+                                  let cellBg = 'bg-white';
+                                  let statusBadgeText = 'ไม่ได้ลงเวลา';
+                                  let statusBadgeColor = 'bg-slate-50 text-slate-400 border-slate-150';
+
+                                  if (uAv) {
+                                    if (uAv.status === 'available') {
+                                      cellBg = 'bg-emerald-50/20 hover:bg-emerald-50/40';
+                                      statusBadgeText = 'ว่าง';
+                                      statusBadgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-150 shadow-xs';
+                                    } else if (uAv.status === 'busy') {
+                                      cellBg = 'bg-rose-50/15 hover:bg-rose-50/35';
+                                      statusBadgeText = 'ไม่ว่าง';
+                                      statusBadgeColor = 'bg-rose-50 text-rose-700 border-rose-150 shadow-xs';
+                                    }
+                                  }
+
+                                  return (
+                                    <td 
+                                      key={user.id}
+                                      onClick={() => {
+                                        if (isLocked) {
+                                          alert('⚠️ ตารางถูกปิดล็อกด้วยระบบความปลอดภัยเชิงเวลา (Time-based Server Lock)');
+                                          return;
+                                        }
+                                        setEditingCell({ hour, userId: user.id });
+                                        // Auto-simulate clicking that user
+                                        setCurrentUser(user);
+                                      }}
+                                      className={`p-1 text-center border-r border-slate-150 transition-all cursor-pointer relative h-12 group select-none ${cellBg} ${
+                                        isSelectedToEdit ? 'ring-2 ring-indigo-500 ring-inset bg-indigo-50/30' : ''
+                                      }`}
+                                    >
+                                      <div className="flex flex-col items-center justify-center h-full gap-0.5">
+                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 border rounded-full scale-90 ${statusBadgeColor}`}>
+                                          {statusBadgeText}
+                                        </span>
+                                        {uAv && uAv.note ? (
+                                          <span 
+                                            className={`text-[9px] text-slate-500 font-sans max-w-[85px] truncate block ${
+                                              uAv.isStruckThrough ? 'line-through text-slate-400 decoration-rose-500 decoration-1 italic' : 'font-medium'
+                                            }`}
+                                            title={uAv.note}
+                                          >
+                                            {uAv.note}
+                                          </span>
+                                        ) : (
+                                          <span className="text-[8px] text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            + ระบุกิจกรรม
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Quick activity slot form */}
+                    {editingCell && (() => {
+                      const targetUser = DEFAULT_USERS.find(u => u.id === editingCell.userId);
+                      if (!targetUser) return null;
+
+                      const daySched = getDaySchedule(selectedDateString);
+                      const avails = daySched.slots[editingCell.hour] || [];
+                      const currentAv = avails.find(a => a.userId === editingCell.userId);
+                      const currentNoteVal = tempNoteInputs[editingCell.hour] !== undefined 
+                        ? tempNoteInputs[editingCell.hour] 
+                        : (currentAv?.note || '');
+
+                      return (
+                        <div className="bg-gradient-to-br from-indigo-50/60 to-slate-50 border border-indigo-200/80 rounded-2xl p-4 mt-4 space-y-3.5 shadow-sm">
+                          <div className="flex items-center justify-between border-b border-indigo-100/50 pb-2">
+                            <div className="flex items-center gap-1.5">
+                              <span 
+                                className="w-2.5 h-2.5 rounded-full" 
+                                style={{ backgroundColor: targetUser.avatarColor }}
+                              />
+                              <h4 className="text-xs font-bold text-slate-800">
+                                ระบุกิจกรรม: <span className="text-indigo-750 font-extrabold">{targetUser.fullName}</span> (เวลา {editingCell.hour} น.)
+                              </h4>
+                            </div>
+                            <button 
+                              onClick={() => setEditingCell(null)}
+                              className="text-[10px] text-slate-400 hover:text-indigo-600 font-bold bg-white border border-slate-200 hover:border-indigo-200 px-2 py-0.5 rounded-lg transition-colors"
+                            >
+                              ปิด [X]
+                            </button>
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className="grid grid-cols-3 gap-2">
+                              <button
+                                onClick={() => {
+                                  handleUpdateAvailability(editingCell.hour, 'available', currentNoteVal, currentAv?.isStruckThrough);
+                                }}
+                                className={`py-1.5 px-3 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1 cursor-pointer focus:outline-none ${
+                                  currentAv?.status === 'available'
+                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                }`}
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>ว่าง</span>
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  handleUpdateAvailability(editingCell.hour, 'busy', currentNoteVal, currentAv?.isStruckThrough);
+                                }}
+                                className={`py-1.5 px-3 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1 cursor-pointer focus:outline-none ${
+                                  currentAv?.status === 'busy'
+                                    ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                }`}
+                              >
+                                <X className="w-3.5 h-3.5" />
+                                <span>ไม่ว่าง</span>
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  handleClearSlot(editingCell.hour);
+                                  setEditingCell(null);
+                                }}
+                                className="py-1.5 px-3 rounded-xl text-xs font-bold border bg-white border-slate-200 text-slate-500 hover:bg-slate-50 flex items-center justify-center gap-1 cursor-pointer focus:outline-none"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                                <span>ล้างช่อง</span>
+                              </button>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-slate-500 block">ระบุกิจกรรม และ รายละเอียดเวลาตารางกริด (เช่น "สอน วก.102 (09:00 - 11:30)")</label>
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  value={currentNoteVal}
+                                  onChange={(e) => handleUpdateNoteText(editingCell.hour, e.target.value)}
+                                  placeholder="ระบุกิจกรรม / หัวข้อประชุม / โครงการวิชาการ..."
+                                  className="text-xs py-2 px-3 border border-slate-200 rounded-xl w-full bg-white focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100"
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handleUpdateAvailability(
+                                        editingCell.hour, 
+                                        currentAv?.status || 'available', 
+                                        currentNoteVal, 
+                                        currentAv?.isStruckThrough
+                                      );
+                                      addAuditLog(`อัปเดตกิจกรรม ${targetUser.name} [${editingCell.hour}]: "${currentNoteVal}"`);
+                                      setEditingCell(null);
+                                    }
+                                  }}
+                                />
+                                <button
+                                  onClick={() => {
+                                    handleUpdateAvailability(
+                                      editingCell.hour, 
+                                      currentAv?.status || 'available', 
+                                      currentNoteVal, 
+                                      currentAv?.isStruckThrough
+                                    );
+                                    addAuditLog(`บันทึกตารางกริด ${targetUser.name} [${editingCell.hour} น.]: "${currentNoteVal}"`);
+                                    setEditingCell(null);
+                                  }}
+                                  className="bg-indigo-650 hover:bg-indigo-700 text-white font-bold text-xs py-2 px-4 rounded-xl shrink-0 transition-colors shadow-xs"
+                                >
+                                  บันทึก
+                                </button>
+                              </div>
+                            </div>
+
+                            {currentAv && currentAv.note && (
+                              <div className="flex items-center justify-between pt-1 border-t border-indigo-100/30">
+                                <span className="text-[9px] text-slate-400">ขีดทับหรือคืนค่ากิจกรรมชั่วคราว:</span>
+                                <button
+                                  onClick={() => {
+                                    handleToggleStrikeThrough(editingCell.hour);
+                                  }}
+                                  className={`py-1 px-2.5 rounded-lg text-[9px] font-bold border transition-all cursor-pointer ${
+                                    currentAv.isStruckThrough
+                                      ? 'bg-amber-50 border-amber-200 text-amber-700 font-bold line-through'
+                                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  {currentAv.isStruckThrough ? 'ยกเลิกขีดทับ' : 'ขีดทับกิจกรรม'}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {HOURLY_SLOTS.map((hour) => {
+                      const daySched = getDaySchedule(selectedDateString);
+                      const avails = daySched.slots[hour] || [];
                     
                     // Match the slot entry of CURRENT user
                     const userAvail = avails.find(a => a.userId === currentUser.id);
@@ -996,7 +1281,8 @@ export default function App() {
                     );
                   })}
                 </div>
-              </div>
+              )}
+            </div>
 
             </div>
 
