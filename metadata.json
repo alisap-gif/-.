@@ -1,0 +1,6 @@
+{
+  "name": "ระบบตารางนัดทีม วก. ปีการศึกษา 2570",
+  "description": "ระบบบริหารจัดการและประเมินเวลาว่างสำหรับผู้บริหารและทีม วก. ปีการศึกษา 2570 เพื่อความสะดวก รวดเร็ว และรองรับเครื่องข่ายขัดข้อง",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

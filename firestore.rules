@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Safety Net - Default Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Core Architecture Primitives & Helpers ---
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'google.com');
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Entity Specific Validators ---
+
+    function isValidDaySchedule(data) {
+      return data.keys().hasAll(['dateString', 'slots']) 
+        && data.keys().size() == 2
+        && data.dateString is string 
+        && data.dateString.size() <= 32
+        && data.slots is map;
+    }
+
+    function isValidAttachedFile(data) {
+      return data.keys().hasAll(['id', 'name', 'size', 'uploadedAt', 'fileType'])
+        && data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 256
+        && data.size is string && data.size.size() <= 32
+        && data.uploadedAt is string && data.uploadedAt.size() <= 64
+        && data.fileType is string && data.fileType.size() <= 16;
+    }
+
+    function isValidGasConfig(data) {
+      return data.keys().hasAll(['gasUrl'])
+        && data.keys().size() == 1
+        && data.gasUrl is string && data.gasUrl.size() <= 2048;
+    }
+
+    // --- Router and Path Rules ---
+
+    match /schedules/{dateString} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isVerified() && isValidDaySchedule(incoming()) && isValidId(dateString);
+      allow delete: if isVerified() && isValidId(dateString);
+    }
+
+    match /attachedFiles/{fileId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isVerified() && isValidAttachedFile(incoming()) && isValidId(fileId);
+      allow delete: if isVerified() && isValidId(fileId);
+    }
+
+    match /gasConfig/{primaryId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isVerified() && isValidGasConfig(incoming()) && primaryId == 'primary';
+      allow delete: if isVerified() && primaryId == 'primary';
+    }
+  }
+}

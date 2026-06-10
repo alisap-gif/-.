@@ -1,0 +1,69 @@
+{
+  "entities": {
+    "SlotAvailability": {
+      "title": "SlotAvailability",
+      "description": "Represents the availability slot response of a team member",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Unique identifier of the user" },
+        "userName": { "type": "string", "description": "Display initials of the user" },
+        "status": { "type": "string", "enum": ["available", "busy", "none"], "description": "The current slot status" },
+        "note": { "type": "string", "description": "Optional notes/activities text" },
+        "isStruckThrough": { "type": "boolean", "description": "Signifies that this slot schedule has been struck-out/cancelled" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "ISO timestamp for time-based integrity validation" }
+      },
+      "required": ["userId", "userName", "status", "note", "isStruckThrough", "updatedAt"]
+    },
+    "DaySchedule": {
+      "title": "DaySchedule",
+      "description": "Represents a day's hourly schedules map",
+      "type": "object",
+      "properties": {
+        "dateString": { "type": "string", "description": "Target date string in YYYY-MM-DD format" },
+        "slots": {
+          "type": "object",
+          "description": "Map of hour keys (e.g., '09:00') to list of SlotAvailability objects"
+        }
+      },
+      "required": ["dateString", "slots"]
+    },
+    "AttachedFile": {
+      "title": "AttachedFile",
+      "description": "Represents an attached schedule files reference metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique file identifier" },
+        "name": { "type": "string", "description": "Name of the file" },
+        "size": { "type": "string", "description": "Friendly size string (e.g. 524KB)" },
+        "uploadedAt": { "type": "string", "format": "date-time", "description": "ISO timestamp when uploaded" },
+        "fileType": { "type": "string", "description": "PDF or Excel string indicator" },
+        "url": { "type": "string", "description": "Mock or real cloud download link" },
+        "contentSnapshot": { "type": "string", "description": "Optional short summary or text representation of schedule content" }
+      },
+      "required": ["id", "name", "size", "uploadedAt", "fileType"]
+    },
+    "GasConfig": {
+      "title": "GasConfig",
+      "description": "Google Apps Script integration endpoint configuration",
+      "type": "object",
+      "properties": {
+        "gasUrl": { "type": "string", "description": "Google Sheets dynamic sync webapp URL" }
+      },
+      "required": ["gasUrl"]
+    }
+  },
+  "firestore": {
+    "schedules/{dateString}": {
+      "schema": "DaySchedule",
+      "description": "Primary store of active scheduling calendars segmented by a primary date index"
+    },
+    "attachedFiles/{fileId}": {
+      "schema": "AttachedFile",
+      "description": "Metadata database about attachment schedules linked to meetings"
+    },
+    "gasConfig/primary": {
+      "schema": "GasConfig",
+      "description": "Storage for dynamic google apps script links"
+    }
+  }
+}
