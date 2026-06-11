@@ -23,7 +23,8 @@ import {
   FileSpreadsheet,
   Database,
   Table,
-  Edit
+  Edit,
+  Type
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -119,6 +120,7 @@ export default function App() {
   
   // Custom height resizer for Google Doc feel
   const [calendarCardHeight, setCalendarCardHeight] = useState<number>(310);
+  const [calendarFontSize, setCalendarFontSize] = useState<number>(10);
   const [isResizing, setIsResizing] = useState<boolean>(false);
   const startResizeY = React.useRef<number>(0);
   const startHeight = React.useRef<number>(0);
@@ -1268,46 +1270,92 @@ export default function App() {
                     </p>
                   </div>
 
-                  {/* Responsive Elegant Calendar Height Slider */}
-                  <div className="flex flex-col gap-1.5 w-full lg:w-64">
-                    <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
-                      <span className="flex items-center gap-1">
-                        <Sliders className="w-3.5 h-3.5 text-indigo-500" />
-                        ปรับความสูงตารางนัดหมาย
-                      </span>
-                      <span className="font-mono text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded text-[10px]">
-                        {calendarCardHeight}px
-                      </span>
-                    </div>
-                    <div className="relative w-full h-5 flex items-center">
-                      <div className="w-full h-1.5 bg-slate-100 rounded-full"></div>
-                      <div 
-                        style={{ width: `${((calendarCardHeight - 180) / (800 - 180)) * 100}%` }}
-                        className="absolute h-1.5 bg-indigo-500 rounded-full left-0 pointer-events-none"
-                      ></div>
-                      <div 
-                        style={{ left: `calc(${((calendarCardHeight - 180) / (800 - 180)) * 100}% - 6px)` }}
-                        className="absolute w-3 h-4 bg-indigo-600 rounded-sm border border-white cursor-ew-resize flex items-center justify-center shadow-md hover:bg-indigo-700 hover:scale-105 active:bg-indigo-800 transition-transform duration-75 pointer-events-none"
-                        title="คลิกลากซ้ายขวาเพื่อคุมความสูง"
-                      >
-                        <div className="w-[1px] h-2 bg-white"></div>
+                  {/* Responsive Elegant Calendar Control Box */}
+                  <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto shrink-0">
+                    {/* Responsive Elegant Calendar Height Slider */}
+                    <div className="flex flex-col gap-1.5 w-full sm:w-56 lg:w-56">
+                      <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
+                        <span className="flex items-center gap-1">
+                          <Sliders className="w-3.5 h-3.5 text-indigo-500" />
+                          ปรับความสูงตารางนัดหมาย
+                        </span>
+                        <span className="font-mono text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded text-[10px]">
+                          {calendarCardHeight}px
+                        </span>
                       </div>
-                      <input
-                        type="range"
-                        min="180"
-                        max="800"
-                        value={calendarCardHeight}
-                        onChange={(e) => {
-                          const val = Number(e.target.value);
-                          setCalendarCardHeight(val);
-                        }}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      />
+                      <div className="relative w-full h-5 flex items-center">
+                        <div className="w-full h-1.5 bg-slate-100 rounded-full"></div>
+                        <div 
+                          style={{ width: `${((calendarCardHeight - 180) / (800 - 180)) * 100}%` }}
+                          className="absolute h-1.5 bg-indigo-500 rounded-full left-0 pointer-events-none"
+                        ></div>
+                        <div 
+                          style={{ left: `calc(${((calendarCardHeight - 180) / (800 - 180)) * 100}% - 6px)` }}
+                          className="absolute w-3 h-4 bg-indigo-600 rounded-sm border border-white cursor-ew-resize flex items-center justify-center shadow-md hover:bg-indigo-700 hover:scale-105 active:bg-indigo-800 transition-transform duration-75 pointer-events-none"
+                          title="คลิกลากซ้ายขวาเพื่อคุมความสูง"
+                        >
+                          <div className="w-[1px] h-2 bg-white"></div>
+                        </div>
+                        <input
+                          type="range"
+                          min="180"
+                          max="800"
+                          value={calendarCardHeight}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setCalendarCardHeight(val);
+                          }}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                      </div>
+                      <div className="text-[9px] text-slate-400 font-sans flex justify-between select-none">
+                        <span>180px</span>
+                        <span className="italic text-indigo-400">ดึงขอบล่างของวันได้!</span>
+                        <span>800px</span>
+                      </div>
                     </div>
-                    <div className="text-[9px] text-slate-400 font-sans flex justify-between select-none">
-                      <span>180px</span>
-                      <span className="italic text-indigo-400">ดึงขอบล่างของวันได้เช่นกัน!</span>
-                      <span>800px</span>
+
+                    {/* Responsive Elegant Calendar Font Size Slider */}
+                    <div className="flex flex-col gap-1.5 w-full sm:w-56 lg:w-56">
+                      <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
+                        <span className="flex items-center gap-1">
+                          <Type className="w-3.5 h-3.5 text-indigo-500" />
+                          ปรับขนาดตัวอักษร
+                        </span>
+                        <span className="font-mono text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded text-[10px]">
+                          {calendarFontSize}px
+                        </span>
+                      </div>
+                      <div className="relative w-full h-5 flex items-center">
+                        <div className="w-full h-1.5 bg-slate-100 rounded-full"></div>
+                        <div 
+                          style={{ width: `${((calendarFontSize - 7) / (16 - 7)) * 100}%` }}
+                          className="absolute h-1.5 bg-indigo-500 rounded-full left-0 pointer-events-none"
+                        ></div>
+                        <div 
+                          style={{ left: `calc(${((calendarFontSize - 7) / (16 - 7)) * 100}% - 6px)` }}
+                          className="absolute w-3 h-4 bg-indigo-600 rounded-sm border border-white cursor-ew-resize flex items-center justify-center shadow-md hover:bg-indigo-700 hover:scale-105 active:bg-indigo-800 transition-transform duration-75 pointer-events-none"
+                          title="คลิกลากซ้ายขวาเพื่อปรับขนาดตัวอักษร"
+                        >
+                          <div className="w-[1px] h-2 bg-white"></div>
+                        </div>
+                        <input
+                          type="range"
+                          min="7"
+                          max="16"
+                          value={calendarFontSize}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setCalendarFontSize(val);
+                          }}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                      </div>
+                      <div className="text-[9px] text-slate-400 font-sans flex justify-between select-none">
+                        <span>7px</span>
+                        <span className="italic text-indigo-400">ปรับข้อความนัดหมาย</span>
+                        <span>16px</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1437,22 +1485,35 @@ export default function App() {
                               );
                             })()}
                           </div>
-
                           {/* Morning Content Area */}
                           <div className="p-2 flex-grow overflow-y-auto space-y-1 min-h-0 bg-white flex flex-col justify-between">
                             {/* Morning Slots list */}
                             <div className="space-y-1">
+                              {daySched.morningNote && (
+                                <div 
+                                  style={{ fontSize: `${calendarFontSize * 0.95}px` }}
+                                  className="p-1 px-1.5 rounded-md bg-amber-50/40 border border-amber-100/30 text-slate-700 leading-normal mb-1 bg-gradient-to-r from-amber-50/60 to-orange-50/20"
+                                >
+                                  {parseHighlighterText(daySched.morningNote, isSelected)}
+                                </div>
+                              )}
                               {morningSlots.map(([hr, avails]) => {
                                 const activeAvails = avails.filter(av => av.status !== 'none');
                                 if (activeAvails.length === 0) return null;
                                 return (
                                   <div key={hr} className="flex flex-col gap-0.5 border-b border-slate-50 pb-0.5 last:border-0" onClick={(e) => e.stopPropagation()}>
-                                    <span className="font-bold text-slate-500 font-mono text-[9px]">{hr} น. :</span>
+                                    <span 
+                                      style={{ fontSize: `${calendarFontSize * 0.9}px` }}
+                                      className="font-bold text-slate-500 font-mono"
+                                    >
+                                      {hr} น. :
+                                    </span>
                                     <div className="flex flex-wrap gap-0.5">
                                       {activeAvails.map(av => (
                                         <span 
                                           key={av.userId} 
-                                          className={`px-1 py-0.2 rounded-sm text-[8px] ${
+                                          style={{ fontSize: `${calendarFontSize * 0.8}px` }}
+                                          className={`px-1 py-0.2 rounded-sm ${
                                             av.status === 'available' 
                                               ? 'bg-emerald-50 text-emerald-700' 
                                               : 'bg-rose-50 text-rose-600 line-through decoration-slate-400'
@@ -1476,7 +1537,8 @@ export default function App() {
                                 placeholder="ไม่มีนัดช่วงเช้า / พิมพ์บันทึก..."
                                 disabled={isLocked}
                                 rows={2}
-                                className={`w-full text-[9px] p-1 rounded-md border border-slate-100 bg-slate-50/50 text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-1 focus:ring-indigo-500/20 resize-none focus:outline-none transition-all ${isLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                style={{ fontSize: `${calendarFontSize * 0.9}px` }}
+                                className={`w-full p-1 rounded-md border border-slate-100 bg-slate-50/50 text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-1 focus:ring-indigo-500/20 resize-none focus:outline-none transition-all ${isLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
                               />
                             </div>
                           </div>
@@ -1486,7 +1548,7 @@ export default function App() {
                         <div className="border-t border-slate-200 z-10"></div>
 
                         {/* Lower Compartment: Afternoon (ช่วงบ่าย) */}
-                        <div className="flex-Grow flex flex-col min-h-0 bg-white">
+                        <div className="flex-1 flex flex-col min-h-0 bg-white">
                           {/* Afternoon Header */}
                           <div className="p-2 bg-amber-50/10 flex items-center justify-between border-b border-dashed border-slate-150">
                             <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1 py-0.5 rounded select-none">⛅ บ่าย</span>
@@ -1518,21 +1580,35 @@ export default function App() {
                             })()}
                           </div>
 
-                          {/* Afternoon Content Area */}
+                           {/* Afternoon Content Area */}
                           <div className="p-2 flex-grow overflow-y-auto space-y-1 min-h-0 flex flex-col justify-between">
                             {/* Afternoon Slots list */}
                             <div className="space-y-1">
+                              {daySched.afternoonNote && (
+                                <div 
+                                  style={{ fontSize: `${calendarFontSize * 0.95}px` }}
+                                  className="p-1 px-1.5 rounded-md bg-amber-50/40 border border-amber-100/30 text-slate-700 leading-normal mb-1 bg-gradient-to-r from-amber-50/60 to-orange-50/20"
+                                >
+                                  {parseHighlighterText(daySched.afternoonNote, isSelected)}
+                                </div>
+                              )}
                               {afternoonSlots.map(([hr, avails]) => {
                                 const activeAvails = avails.filter(av => av.status !== 'none');
                                 if (activeAvails.length === 0) return null;
                                 return (
                                   <div key={hr} className="flex flex-col gap-0.5 border-b border-slate-50 pb-0.5 last:border-0" onClick={(e) => e.stopPropagation()}>
-                                    <span className="font-bold text-slate-500 font-mono text-[9px]">{hr} น. :</span>
+                                    <span 
+                                      style={{ fontSize: `${calendarFontSize * 0.9}px` }}
+                                      className="font-bold text-slate-500 font-mono"
+                                    >
+                                      {hr} น. :
+                                    </span>
                                     <div className="flex flex-wrap gap-0.5">
                                       {activeAvails.map(av => (
                                         <span 
                                           key={av.userId} 
-                                          className={`px-1 py-0.2 rounded-sm text-[8px] ${
+                                          style={{ fontSize: `${calendarFontSize * 0.8}px` }}
+                                          className={`px-1 py-0.2 rounded-sm ${
                                             av.status === 'available' 
                                               ? 'bg-emerald-50 text-emerald-700' 
                                               : 'bg-rose-50 text-rose-600 line-through decoration-slate-400'
@@ -1551,7 +1627,10 @@ export default function App() {
                             {/* Direct Note Typing area for Afternoon Compartment */}
                             <div className="mt-1 pt-1 border-t border-slate-100" onClick={(e) => e.stopPropagation()}>
                               {daySched.dailyNote && (
-                                <p className="text-[8px] font-sans leading-tight text-slate-500 mb-1 max-h-[16px] overflow-y-auto whitespace-pre-wrap break-words italic select-none">
+                                <p 
+                                  style={{ fontSize: `${calendarFontSize * 0.8}px` }}
+                                  className="font-sans leading-tight text-slate-500 mb-1 max-h-[16px] overflow-y-auto whitespace-pre-wrap break-words italic select-none"
+                                >
                                   📝 โน้ตเดิม: {daySched.dailyNote}
                                 </p>
                               )}
@@ -1561,7 +1640,8 @@ export default function App() {
                                 placeholder="ไม่มีนัดช่วงบ่าย / พิมพ์บันทึก..."
                                 disabled={isLocked}
                                 rows={2}
-                                className={`w-full text-[9px] p-1 rounded-md border border-slate-100 bg-slate-50/50 text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-1 focus:ring-indigo-500/20 resize-none focus:outline-none transition-all ${isLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                style={{ fontSize: `${calendarFontSize * 0.9}px` }}
+                                className={`w-full p-1 rounded-md border border-slate-100 bg-slate-50/50 text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-1 focus:ring-indigo-500/20 resize-none focus:outline-none transition-all ${isLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
                               />
                             </div>
                           </div>
