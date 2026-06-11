@@ -22,6 +22,9 @@ export interface DaySchedule {
   slots: {
     [hour: string]: SlotAvailability[]; // hour: "08:00", "09:00", ...
   };
+  dailyNote?: string; // พิมพ์ข้อความในปฏิทินได้เลย
+  morningNote?: string;
+  afternoonNote?: string;
 }
 
 export interface AttachedFile {

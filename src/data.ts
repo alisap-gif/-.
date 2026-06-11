@@ -1,71 +1,9 @@
 import { UserProfile, DaySchedule, AttachedFile } from './types';
 
-export const DEFAULT_USERS: UserProfile[] = [
-  { id: 'as', name: 'AS', fullName: 'ผศ.ดร.อรรยา (AS)', role: 'executive', avatarColor: '#f87171' },
-  { id: 'sc', name: 'SC', fullName: 'รศ.ดร.ศุภเจตน์ (SC)', role: 'executive', avatarColor: '#fb923c' },
-  { id: 'tw', name: 'TW', fullName: 'ดร.ถิรพล (TW)', role: 'executive', avatarColor: '#facc15' },
-  { id: 'jk', name: 'JK', fullName: 'ดร.จิราพร (JK)', role: 'executive', avatarColor: '#4ade80' },
-  { id: 'pk', name: 'PK', fullName: 'ดร.พีรชัย (PK)', role: 'executive', avatarColor: '#38bdf8' },
-  { id: 'team', name: 'ทีม วก', fullName: 'ทีมคณะทำงาน วก.', role: 'executive', avatarColor: '#c084fc' }
-];
+export const DEFAULT_USERS: UserProfile[] = [];
 
 // Seed some data in August 2026 (สิงหาคม 2569 - Buddhist Era)
-export const SEED_SCHEDULES: DaySchedule[] = [
-  {
-    dateString: '2026-08-03', // Mon
-    slots: {
-      '09:00': [
-        { userId: 'as', userName: 'AS', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:00:00Z' },
-        { userId: 'sc', userName: 'SC', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:05:00Z' },
-        { userId: 'tw', userName: 'TW', status: 'busy', note: 'ติดภารกิจนอกห้องเรียน', isStruckThrough: false, updatedAt: '2026-06-10T08:01:00Z' },
-        { userId: 'jk', userName: 'JK', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:02:00Z' },
-        { userId: 'pk', userName: 'PK', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:03:00Z' },
-      ],
-      '10:50': [
-        { userId: 'as', userName: 'AS', status: 'available', note: 'ว่างเฉพาะถึง 11:30', isStruckThrough: false, updatedAt: '2026-06-10T08:00:00Z' },
-        { userId: 'sc', userName: 'SC', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:05:00Z' },
-        { userId: 'tw', userName: 'TW', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:01:00Z' },
-        { userId: 'jk', userName: 'JK', status: 'available', note: 'เข้าประชุมได้', isStruckThrough: false, updatedAt: '2026-06-10T08:02:00Z' },
-        { userId: 'pk', userName: 'PK', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:03:00Z' },
-        { userId: 'team', userName: 'ทีม วก', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:04:00Z' },
-      ],
-      '13:30': [
-        { userId: 'as', userName: 'AS', status: 'busy', note: 'มีสอน วก.201 - ยกเลิกแล้ว', isStruckThrough: true, updatedAt: '2026-06-10T08:00:00Z' },
-        { userId: 'sc', userName: 'SC', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:05:00Z' },
-        { userId: 'tw', userName: 'TW', status: 'available', note: 'ยินดีเลื่อนถ้าจำเป็น', isStruckThrough: false, updatedAt: '2026-06-10T08:01:00Z' },
-        { userId: 'jk', userName: 'JK', status: 'busy', note: 'สัมมนาวิชาการ', isStruckThrough: false, updatedAt: '2026-06-10T08:02:00Z' },
-        { userId: 'pk', userName: 'PK', status: 'busy', note: 'ตรวจข้อสอบ', isStruckThrough: false, updatedAt: '2026-06-10T08:03:00Z' },
-      ],
-      '15:20': [
-        { userId: 'as', userName: 'AS', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:00:00Z' },
-        { userId: 'sc', userName: 'SC', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:05:00Z' },
-        { userId: 'tw', userName: 'TW', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:01:00Z' },
-        { userId: 'jk', userName: 'JK', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:02:00Z' },
-        { userId: 'pk', userName: 'PK', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:03:00Z' },
-        { userId: 'team', userName: 'ทีม วก', status: 'available', note: 'พร้อมเข้าประชุม', isStruckThrough: false, updatedAt: '2026-06-10T08:04:00Z' },
-      ],
-    }
-  },
-  {
-    dateString: '2026-08-04', // Tue
-    slots: {
-      '09:00': [
-        { userId: 'as', userName: 'AS', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:00:00Z' },
-        { userId: 'sc', userName: 'SC', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:01:00Z' },
-        { userId: 'tw', userName: 'TW', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:02:00Z' },
-        { userId: 'jk', userName: 'JK', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:03:00Z' },
-      ],
-      '13:30': [
-        { userId: 'as', userName: 'AS', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:00:00Z' },
-        { userId: 'sc', userName: 'SC', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:01:00Z' },
-        { userId: 'tw', userName: 'TW', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:02:00Z' },
-        { userId: 'jk', userName: 'JK', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:03:00Z' },
-        { userId: 'pk', userName: 'PK', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:04:00Z' },
-        { userId: 'team', userName: 'ทีม วก', status: 'available', note: '', isStruckThrough: false, updatedAt: '2026-06-10T08:05:00Z' },
-      ]
-    }
-  }
-];
+export const SEED_SCHEDULES: DaySchedule[] = [];
 
 export const HOURLY_SLOTS = [
   '08:30',

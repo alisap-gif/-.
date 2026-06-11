@@ -78,23 +78,101 @@ const ACADEMIC_MONTHS: AcademicMonth[] = [
   { index: 6, year: 2027, thaiName: 'กรกฎาคม', beYear: 2570 }
 ];
 
+const DEFAULT_SIMULATED_USERS: UserProfile[] = [
+  { id: 'ms', name: 'MS', fullName: 'ผศ.ดร.มนต์ศักดิ์', role: 'executive', avatarColor: '#4f46e5' },
+  { id: 'as', name: 'AS', fullName: 'ผศ.ดร.อลิศา', role: 'executive', avatarColor: '#ec4899' },
+  { id: 'kk', name: 'KK', fullName: 'รศ.ดร.กัญญ์กนก', role: 'executive', avatarColor: '#10b981' },
+  { id: 'jw', name: 'JW', fullName: 'อ.จิรวัฒน์', role: 'executive', avatarColor: '#f59e0b' },
+  { id: 'pc', name: 'PC', fullName: 'ผศ.ดร.พีรชัย', role: 'executive', avatarColor: '#06b6d4' }
+];
+
 export default function App() {
   // --- Persistent State ---
   const [schedules, setSchedules] = useState<DaySchedule[]>(SEED_SCHEDULES);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>(DEFAULT_ATTACHED_FILES);
-  const [currentUser, setCurrentUser] = useState<UserProfile>(DEFAULT_USERS[0]); // Default to "AS"
+  const [users, setUsers] = useState<UserProfile[]>(DEFAULT_SIMULATED_USERS);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(DEFAULT_SIMULATED_USERS[0]); // Default to first available, or null
   const [selectedMonth, setSelectedMonth] = useState<AcademicMonth>(ACADEMIC_MONTHS[0]); // Default to August 2569
   const [selectedDateString, setSelectedDateString] = useState<string>('2026-08-03'); // Match seed data initially
+  const [calendarViewMode, setCalendarViewMode] = useState<'monthly' | 'weekly'>('monthly');
   const [gasUrl, setGasUrl] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'dashboard' | 'attachments' | 'gas-integration'>('dashboard');
+
+  // --- Login State & Views ---
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => localStorage.getItem('isLoggedIn') === 'true');
+  const [loginTab, setLoginTab] = useState<'google' | 'local'>('google');
+  const [selectedLocalUserId, setSelectedLocalUserId] = useState<string>('ms');
+  const [pin, setPin] = useState('');
+  const [pinError, setPinError] = useState('');
+
+  // Dynamic user profile fields
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserFullName, setNewUserFullName] = useState('');
+  const [newUserColor, setNewUserColor] = useState('#4f46e5');
+  const [showUserManager, setShowUserManager] = useState(false);
 
   // --- UI & Controls State ---
   const [sysTime, setSysTime] = useState<Date>(new Date());
   const [isLocked, setIsLocked] = useState(false); // Time-based integrity simulation lock
   const [auditLogs, setAuditLogs] = useState<string[]>(['[ระบบ] เริ่มต้นเซสชันความปลอดภัยเชิงเวลาสำเร็จ']);
   const [tempNoteInputs, setTempNoteInputs] = useState<{ [hour: string]: string }>({});
-  const [dashboardViewMode, setDashboardViewMode] = useState<'cards' | 'grid'>('grid');
-  const [editingCell, setEditingCell] = useState<{ hour: string; userId: string } | null>(null);
+  
+  // Custom height resizer for Google Doc feel
+  const [calendarCardHeight, setCalendarCardHeight] = useState<number>(310);
+  const [isResizing, setIsResizing] = useState<boolean>(false);
+  const startResizeY = React.useRef<number>(0);
+  const startHeight = React.useRef<number>(0);
+
+  const handleMouseDownOnResizer = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    startResizeY.current = e.clientY;
+    startHeight.current = calendarCardHeight;
+    setIsResizing(true);
+  };
+
+  const handleTouchStartOnResizer = (e: React.TouchEvent) => {
+    e.stopPropagation();
+    if (e.touches[0]) {
+      startResizeY.current = e.touches[0].clientY;
+      startHeight.current = calendarCardHeight;
+      setIsResizing(true);
+    }
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      const deltaY = e.clientY - startResizeY.current;
+      const newHeight = Math.max(180, Math.min(800, startHeight.current + deltaY));
+      setCalendarCardHeight(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      if (isResizing) {
+        setIsResizing(false);
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isResizing || !e.touches[0]) return;
+      const deltaY = e.touches[0].clientY - startResizeY.current;
+      const newHeight = Math.max(180, Math.min(800, startHeight.current + deltaY));
+      setCalendarCardHeight(newHeight);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('touchmove', handleTouchMove);
+    window.addEventListener('touchend', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleMouseUp);
+    };
+  }, [isResizing, calendarCardHeight]);
   
   // Real Firebase User & Status State
   const [fbUser, setFbUser] = useState<any>(null);
@@ -102,6 +180,21 @@ export default function App() {
   const addAuditLog = (msg: string) => {
     const timeStr = new Date().toLocaleTimeString('th-TH');
     setAuditLogs(prev => [`[${timeStr}] ${msg}`, ...prev.slice(0, 19)]);
+  };
+
+  const handleLogout = async () => {
+    setIsLoggedIn(false);
+    localStorage.removeItem('isLoggedIn');
+    setPin('');
+    setPinError('');
+    if (fbUser) {
+      try {
+        await signOut(auth);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    addAuditLog('🔒 ออกจากระบบและสิ้นสุดเซสชันการทำงานเสร็จสิ้น');
   };
 
   // 1. Initially check Firebase connection state on mount
@@ -121,6 +214,8 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setFbUser(user);
       if (user) {
+        setIsLoggedIn(true);
+        localStorage.setItem('isLoggedIn', 'true');
         addAuditLog(`🟢 เชื่อมต่อบัญชีคลาวด์สำเร็จ: (${user.displayName || user.email})`);
       } else {
         addAuditLog(`⚪ สิ้นสุด/ไม่อยู่ในเซสชัน Firebase Auth`);
@@ -176,6 +271,37 @@ export default function App() {
     return () => unsub();
   }, [fbUser]);
 
+  // 6. Listen to dynamic Users Profiles updates on Firestore with fallbacks
+  useEffect(() => {
+    if (!fbUser) return;
+    const unsub = onSnapshot(collection(db, 'users_profile'), (snapshot) => {
+      const dbUsers: UserProfile[] = [];
+      snapshot.forEach(docSnap => {
+        dbUsers.push(docSnap.data() as UserProfile);
+      });
+      if (dbUsers.length > 0) {
+        setUsers(dbUsers);
+      } else {
+        setUsers(DEFAULT_SIMULATED_USERS);
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'users_profile');
+    });
+    return () => unsub();
+  }, [fbUser]);
+
+  // Ensure currentUser is valid when users list changes
+  useEffect(() => {
+    if (users.length > 0) {
+      const exists = currentUser ? users.some(u => u.id === currentUser.id) : false;
+      if (!exists) {
+        setCurrentUser(users[0]);
+      }
+    } else {
+      setCurrentUser(null);
+    }
+  }, [users, currentUser]);
+
   // Update clock
   useEffect(() => {
     const interval = setInterval(() => {
@@ -198,6 +324,11 @@ export default function App() {
   ) => {
     if (isLocked) {
       alert('⚠️ ตารางถูกปิดล็อกด้วยระบบความปลอดภัยเชิงเวลา (Time-based Validation Server Lock) เพื่อความปลอดภัยสูงสุด กรุณาเปิดระบบการขอปลดล็อกชั่วคราว');
+      return;
+    }
+
+    if (!currentUser) {
+      alert('⚠️ โปรดสร้างหรือเลือกผู้บริหารระบบก่อนป้อนข้อมูลความพร้อม');
       return;
     }
 
@@ -267,6 +398,7 @@ export default function App() {
   };
 
   const handleUpdateNoteText = (hour: string, text: string) => {
+    if (!currentUser) return;
     setTempNoteInputs(prev => ({ ...prev, [hour]: text }));
     // Automatically preserve existing status when updating note
     const day = getDaySchedule(selectedDateString);
@@ -278,12 +410,14 @@ export default function App() {
   };
 
   const handleClearSlot = (hour: string) => {
+    if (!currentUser) return;
     setTempNoteInputs(prev => ({ ...prev, [hour]: '' }));
     handleUpdateAvailability(hour, 'none', '', false);
     addAuditLog(`ลบข้อมูลช่วงเวลา ${hour} เรียบร้อยแล้ว`);
   };
 
   const handleToggleStrikeThrough = (hour: string) => {
+    if (!currentUser) return;
     const day = getDaySchedule(selectedDateString);
     const existing = day.slots[hour]?.find(a => a.userId === currentUser.id);
     if (!existing) return;
@@ -294,6 +428,86 @@ export default function App() {
 
     handleUpdateAvailability(hour, currentStatus, currentNote, nextStruck);
     addAuditLog(`เปลี่ยนสถานะการขีดฆ่าตารางนัดหมายในช่วงเวลา ${hour} (${nextStruck ? 'ขีดทับสำเร็จ' : 'นำขีดทับออก'})`);
+  };
+
+  const handleUpdateDailyNote = (dateStr: string, noteText: string) => {
+    if (isLocked) {
+      alert('⚠️ ตารางถูกปิดล็อกด้วยระบบความปลอดภัยเชิงเวลา (Time-based Server Lock)');
+      return;
+    }
+
+    setSchedules(prevSchedules => {
+      const updated = [...prevSchedules];
+      let dayIndex = updated.findIndex(s => s.dateString === dateStr);
+
+      if (dayIndex === -1) {
+        const newDay: DaySchedule = {
+          dateString: dateStr,
+          slots: {},
+          dailyNote: noteText
+        };
+        updated.push(newDay);
+        dayIndex = updated.length - 1;
+      } else {
+        const day = { ...updated[dayIndex], dailyNote: noteText };
+        updated[dayIndex] = day;
+      }
+
+      const day = updated[dayIndex];
+
+      // Persist directly to Firebase Firestore
+      if (fbUser) {
+        setDoc(doc(db, 'schedules', dateStr), day)
+          .catch(err => {
+            handleFirestoreError(err, OperationType.UPDATE, `schedules/${dateStr}`);
+          });
+      }
+
+      return updated;
+    });
+
+    addAuditLog(`อัปเดตบันทึกโน้ตปฏิทินของวันที่ ${dateStr} เป็น: "${noteText}"`);
+  };
+
+  const handleUpdateCompartmentNote = (dateStr: string, compartment: 'morning' | 'afternoon', noteText: string) => {
+    if (isLocked) {
+      alert('⚠️ ตารางถูกปิดล็อกด้วยระบบความปลอดภัยเชิงเวลา (Time-based Server Lock)');
+      return;
+    }
+
+    setSchedules(prevSchedules => {
+      const updated = [...prevSchedules];
+      let dayIndex = updated.findIndex(s => s.dateString === dateStr);
+
+      const fieldName = compartment === 'morning' ? 'morningNote' : 'afternoonNote';
+
+      if (dayIndex === -1) {
+        const newDay: DaySchedule = {
+          dateString: dateStr,
+          slots: {},
+          [fieldName]: noteText
+        };
+        updated.push(newDay);
+        dayIndex = updated.length - 1;
+      } else {
+        const day = { ...updated[dayIndex], [fieldName]: noteText };
+        updated[dayIndex] = day;
+      }
+
+      const day = updated[dayIndex];
+
+      // Persist directly to Firebase Firestore
+      if (fbUser) {
+        setDoc(doc(db, 'schedules', dateStr), day)
+          .catch(err => {
+            handleFirestoreError(err, OperationType.UPDATE, `schedules/${dateStr}`);
+          });
+      }
+
+      return updated;
+    });
+
+    addAuditLog(`อัปเดตบันทึกโน้ตช่วง${compartment === 'morning' ? 'เช้า' : 'บ่าย'}ของวันที่ ${dateStr} เป็น: "${noteText}"`);
   };
 
   // --- Real-Time Simulation Trigger ---
@@ -318,8 +532,8 @@ export default function App() {
         const slotsForHour = day.slots[hour] ? [...day.slots[hour]] : [];
         
         // Let's seed for developers OTHER than the current selected user
-        DEFAULT_USERS.forEach(user => {
-          if (user.id === currentUser.id || user.id === 'secretary') return;
+        users.forEach(user => {
+          if (user.id === currentUser?.id || user.id === 'secretary') return;
           
           const existingIdx = slotsForHour.findIndex(s => s.userId === user.id);
           const probability = Math.random();
@@ -372,6 +586,77 @@ export default function App() {
     addAuditLog('⚡ จำลองกิจกรรมทีมบริหารสำเร็จ: ความหนาแน่นแผนความร้อน (Heatmap Overlay Matrix) อัปเดตอัตโนมัติ');
   };
 
+  const handleAddUserProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isLocked) {
+      alert('⚠️ ตารางถูกปิดล็อกด้วยระบบความปลอดภัยเชิงเวลา (Time-based Server Lock)');
+      return;
+    }
+    const nameTrim = newUserName.trim();
+    const fullNameTrim = newUserFullName.trim();
+    if (!nameTrim || !fullNameTrim) {
+      alert('⚠️ กรุณากรอกชื่อย่อและชื่อเต็มให้ครบถ้วน');
+      return;
+    }
+
+    // Slugify id
+    const slugId = nameTrim.toLowerCase().replace(/\s+/g, '-');
+    if (users.some(u => u.id === slugId || u.name.toLowerCase() === nameTrim.toLowerCase())) {
+      alert('⚠️ มีระบุชื่อย่อผู้ใช้งานนี้อยู่แล้วในระบบ');
+      return;
+    }
+
+    const newUser: UserProfile = {
+      id: slugId,
+      name: nameTrim,
+      fullName: fullNameTrim,
+      role: 'executive',
+      avatarColor: newUserColor
+    };
+
+    const updatedUsers = [...users, newUser];
+    setUsers(updatedUsers);
+
+    if (fbUser) {
+      try {
+        await setDoc(doc(db, 'users_profile', slugId), newUser);
+        addAuditLog(`เพิ่มรายชื่อผู้บริหารท่านใหม่สำเร็จ: ${fullNameTrim} (${nameTrim})`);
+      } catch (err) {
+        console.error('Error adding user profile to Firestore:', err);
+      }
+    }
+
+    setNewUserName('');
+    setNewUserFullName('');
+    setNewUserColor('#4f46e5');
+  };
+
+  const handleDeleteUserProfile = async (id: string, name: string) => {
+    if (isLocked) {
+      alert('⚠️ ตารางถูกปิดล็อกด้วยระบบความปลอดภัยเชิงเวลา (Time-based Server Lock)');
+      return;
+    }
+    if (users.length <= 1) {
+      alert('⚠️ ต้องคงเหลือผู้ใช้งานในตารางตรวจสอบสิทธิ์อย่างน้อย 1 รายชื่อ');
+      return;
+    }
+    if (confirm(`คุณแน่ใจหรือไม่ที่จะลบรายชื่อ "${name}" ออกจากระบบ?`)) {
+      const updated = users.filter(u => u.id !== id);
+      setUsers(updated);
+      if (currentUser.id === id) {
+        setCurrentUser(updated[0]);
+      }
+      if (fbUser) {
+        try {
+          await deleteDoc(doc(db, 'users_profile', id));
+          addAuditLog(`ลบรายชื่อผู้บริหารออกจากระบบ: ${name}`);
+        } catch (err) {
+          console.error('Error removing user profile:', err);
+        }
+      }
+    }
+  };
+
   // --- GAS Synchronization Simulator ---
   const sendDataToGAS = async (optSchedules?: DaySchedule[]) => {
     if (!gasUrl) return;
@@ -410,6 +695,109 @@ export default function App() {
   const daysArray = Array.from({ length: daysInActiveMonth }, (_, i) => i + 1);
   const paddingArray = Array.from({ length: firstDayOfWeekOffset }, (_, i) => i);
 
+  // Get all 7 dates in the week of the selected date string (Sun - Sat)
+  const getWeeklyDates = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const dayOfWeek = date.getDay(); // 0 is Sun, 1 is Mon, etc.
+    const sunday = new Date(date);
+    sunday.setDate(date.getDate() - dayOfWeek);
+    
+    const dates = [];
+    for (let i = 0; i < 7; i++) {
+      const tempDate = new Date(sunday);
+      tempDate.setDate(sunday.getDate() + i);
+      dates.push(tempDate);
+    }
+    return dates;
+  };
+
+  const getThaiMonthShort = (monthIdx: number) => {
+    const shortNames = [
+      'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+      'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'
+    ];
+    return shortNames[monthIdx];
+  };
+
+  const insertHighlightTag = (dateStr: string, color: string) => {
+    const textarea = document.getElementById(`textarea-${dateStr}`) as HTMLTextAreaElement | null;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+    const selectedText = text.substring(start, end) || '';
+    if (!selectedText) {
+      alert('💡 กรุณาลากคลุม (เลือกข้อความ) ที่ต้องการเพิ่มสีก่อน จากนั้นระบบจะสวมหน้ากากไฮไลท์สีให้ในช่องทันทีครับ');
+      textarea.focus();
+      return;
+    }
+    
+    const formattedText = text.substring(0, start) + `#${color}(${selectedText})` + text.substring(end);
+    handleUpdateDailyNote(dateStr, formattedText);
+
+    // Re-focus and set selection
+    setTimeout(() => {
+      textarea.focus();
+      const newCursorPos = start + color.length + 2 + selectedText.length + 1; // len of `#color(selected)`
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 50);
+  };
+
+  const parseHighlighterText = (text: string, isWhiteTextOnActive: boolean) => {
+    if (!text) return <span className="text-slate-400/85 italic text-[11px]">ไม่มีบันทึกสำหรับวันนี้...</span>;
+
+    const regex = /#(red|blue|green|yellow|pink|purple)\(([^)]+)\)/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(text)) !== null) {
+      const matchIndex = match.index;
+      if (matchIndex > lastIndex) {
+        parts.push(text.substring(lastIndex, matchIndex));
+      }
+      const color = match[1];
+      const content = match[2];
+
+      let styleClass = '';
+      if (color === 'red') {
+        styleClass = isWhiteTextOnActive 
+          ? 'text-rose-105 font-extrabold underline decoration-rose-300' 
+          : 'text-rose-600 font-bold bg-rose-50 px-1 py-0.5 rounded border border-rose-100';
+      } else if (color === 'blue') {
+        styleClass = isWhiteTextOnActive 
+          ? 'text-indigo-150 font-extrabold underline decoration-indigo-350' 
+          : 'text-blue-600 font-bold bg-blue-50 px-1 py-0.5 rounded border border-blue-100';
+      } else if (color === 'green') {
+        styleClass = isWhiteTextOnActive 
+          ? 'text-emerald-100 font-extrabold underline decoration-emerald-300' 
+          : 'text-emerald-750 font-bold bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100';
+      } else if (color === 'yellow') {
+        styleClass = 'bg-yellow-200 text-slate-900 font-extrabold px-1.5 py-0.5 rounded shadow-xs';
+      } else if (color === 'pink') {
+        styleClass = 'bg-pink-200 text-slate-900 font-extrabold px-1.5 py-0.5 rounded shadow-xs';
+      } else if (color === 'purple') {
+        styleClass = isWhiteTextOnActive 
+          ? 'text-purple-100 font-extrabold underline decoration-purple-350' 
+          : 'text-purple-750 font-bold bg-purple-50 px-1 py-0.5 rounded border border-purple-100';
+      }
+
+      parts.push(
+        <span key={matchIndex} className={styleClass}>
+          {content}
+        </span>
+      );
+      lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+
+    return <div className="whitespace-pre-wrap break-words">{parts}</div>;
+  };
+
   // File Add / Remove hooks
   const handleAddFile = async (file: AttachedFile) => {
     setAttachedFiles(prev => [file, ...prev]);
@@ -439,8 +827,241 @@ export default function App() {
     }
   };
 
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-hidden font-sans selection:bg-indigo-505 selection:text-white" id="login-layout">
+        {/* Animated glowing backgrounds */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl animate-pulse pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-fuchsia-600/10 rounded-full blur-3xl animate-pulse pointer-events-none" style={{ animationDelay: '2s' }} />
+        
+        {/* Decorative Grid Lines */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-20 pointer-events-none" />
+
+        <div className="w-full max-w-md relative z-10">
+          
+          {/* Main Logo & Title */}
+          <div className="text-center mb-8">
+            <div className="inline-flex p-4 bg-gradient-to-tr from-indigo-600 to-violet-500 text-white rounded-3xl shadow-xl shadow-indigo-950/50 mb-4 items-center justify-center">
+              <Users className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-2xl font-extrabold text-white tracking-tight font-display">
+              ระบบตารางนัดทีม วก.
+            </h1>
+            <p className="text-sm text-slate-400 mt-2 max-w-xs mx-auto">
+              กลุ่มผู้บริหารวิชาการ มหาวิทยาลัยเพื่อการพัฒนาและบูรณาการการเรียนรู้
+            </p>
+          </div>
+
+          {/* Login Card */}
+          <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl shadow-2xl p-6 md:p-8">
+            
+            {/* Tab switch buttons */}
+            <div className="grid grid-cols-2 gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-900 mb-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginTab('google');
+                  setPinError('');
+                }}
+                className={`py-2.5 px-3 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer ${
+                  loginTab === 'google'
+                    ? 'bg-slate-800 text-white shadow-sm ring-1 ring-slate-700'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                🔐 Google Cloud
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginTab('local');
+                  setPinError('');
+                }}
+                className={`py-2.5 px-3 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer ${
+                  loginTab === 'local'
+                    ? 'bg-slate-800 text-white shadow-sm ring-1 ring-slate-700'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                👤 สิทธิ์ผู้บริหารจำลอง
+              </button>
+            </div>
+
+            {loginTab === 'google' ? (
+              <div className="space-y-5">
+                <div className="text-center py-2">
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    เข้าสู่ระบบร่วมกับโครงสร้างพื้นฐานความปลอดภัย Google Workspace Coordinated Cloud เพื่อการประสานตารางเวลาแบบเรียลไทม์
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await signInWithPopup(auth, googleProvider);
+                    } catch (e) {
+                      setPinError(e instanceof Error ? e.message : String(e));
+                    }
+                  }}
+                  className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs transition-all duration-200 shadow-md hover:shadow-indigo-500/10 cursor-pointer select-none active:scale-98"
+                >
+                  <Users className="w-4.5 h-4.5 text-indigo-200" />
+                  <span>เข้าสู่ระบบด้วย Google Account</span>
+                </button>
+
+                {pinError && (
+                  <div className="p-3 bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs rounded-xl flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <span>{pinError}</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[11px] text-slate-400 font-bold block mb-1.5">
+                    เลือกบัญชีผู้บริหารระบบเพื่อเข้าใช้งาน:
+                  </label>
+                  <div className="grid grid-cols-1 gap-2 max-h-[140px] overflow-y-auto pr-1">
+                    {users.map(u => {
+                      const isSel = selectedLocalUserId === u.id;
+                      return (
+                        <button
+                          key={u.id}
+                          type="button"
+                          onClick={() => setSelectedLocalUserId(u.id)}
+                          className={`flex items-center justify-between p-2.5 rounded-lg border text-left text-xs transition-all duration-150 cursor-pointer ${
+                            isSel 
+                              ? 'bg-indigo-650/30 border-indigo-500 text-white font-bold' 
+                              : 'bg-slate-950/40 border-slate-800 text-slate-300 hover:bg-slate-900/80 hover:text-white'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: u.avatarColor }} />
+                            <div>
+                              <span>{u.fullName}</span>
+                              <span className="text-[10px] text-slate-400 ml-1.5 font-mono">({u.name})</span>
+                            </div>
+                          </div>
+                          {isSel && <Check className="w-4 h-4 text-indigo-400" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-slate-400 font-bold block mb-1.5">
+                    กรอกรหัสพินเข้าใช้ตรรกะจำลอง (Passcode PIN):
+                  </label>
+                  <input
+                    type="password"
+                    maxLength={4}
+                    value={pin}
+                    onChange={(e) => {
+                      setPin(e.target.value.replace(/\D/g, ''));
+                      setPinError('');
+                    }}
+                    placeholder="ป้อนรหัสพิน 4 หลัก"
+                    className="w-full text-center bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white tracking-widest font-mono text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-700 placeholder:tracking-normal"
+                  />
+                  <div className="flex items-center gap-1.5 mt-2 text-[10px] text-indigo-300 bg-slate-950/50 px-2.5 py-1.5 rounded-lg border border-slate-850">
+                    <Info className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                    <span>คำแนะนำ: รหัสมาตรฐานสัญญากลางทีม วก. คือ <strong>1234</strong></span>
+                  </div>
+                </div>
+
+                {pinError && (
+                  <div className="p-3 bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs rounded-xl flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <span>{pinError}</span>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (pin === '1234') {
+                      const targetUser = users.find(u => u.id === selectedLocalUserId);
+                      if (targetUser) {
+                        setCurrentUser(targetUser);
+                      }
+                      setIsLoggedIn(true);
+                      localStorage.setItem('isLoggedIn', 'true');
+                      addAuditLog(`🔓 บัญชีผู้ใช้งานจำลอง ${targetUser?.fullName || ''} ล็อกอินเข้าใช้งานด้วย PIN สำเร็จ`);
+                    } else {
+                      setPinError('❌ รหัสพินไม่ถูกต้อง! กรุณากรอกรหัสผ่านเพื่อสัญญากลาง (ลองใช้ "1234")');
+                    }
+                  }}
+                  className="w-full py-2.5 px-4 bg-indigo-650 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs transition-colors shadow-md cursor-pointer mt-2"
+                >
+                  ยืนยันเข้าสู่ระบบ
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="text-center mt-6 text-[11px] text-slate-650 font-mono">
+            ระบบจัดเก็บตารางนโยบาย • รักษาความปลอดภัยตามพฤติกรรมเชิงเวลาแบบเรียลไทม์
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-between font-sans leading-relaxed selection:bg-indigo-100 selection:text-indigo-900" id="app-root-layout">
+      {/* Print Styles Dynamic Block */}
+      <style>{`
+        @media print {
+          /* Full landscape-friendly text parameters */
+          body {
+            background: white !important;
+            color: black !important;
+          }
+          header, 
+          footer,
+          button,
+          textarea,
+          input,
+          .no-print,
+          #audit-log-panel,
+          [role="tablist"],
+          .tab-buttons {
+            display: none !important;
+          }
+          #app-root-layout, main, .max-w-7xl {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+            background-color: transparent !important;
+          }
+          /* Preserve colors for green heatmap density grids on color printer */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .grid {
+            display: grid !important;
+            gap: 12px !important;
+          }
+          /* Custom calendar item height auto expansion */
+          .flex-col.border.rounded-xl {
+            height: auto !important;
+            min-height: 250px !important;
+            page-break-inside: avoid !important;
+            border: 2px solid #94a3b8 !important;
+          }
+          .max-h-\\[140px\\] {
+            max-height: none !important;
+            overflow: visible !important;
+          }
+        }
+      `}</style>
       
       {/* Main Navigation Header with Sleek Interface brand guidelines */}
       <header className="bg-white/80 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-40 px-4 lg:px-8 py-4 shadow-sm">
@@ -455,7 +1076,7 @@ export default function App() {
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-lg font-display tracking-tight text-slate-900 font-bold">
-                  ระบบตารางนัดทีม วก. ปีการศึกษา 2570
+                  ตารางนัดทีม วก. ปีการศึกษา 2570
                 </h1>
                 <span className="bg-indigo-50/70 text-indigo-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-indigo-100 font-display">
                   สิงหาคม 2569 – กรกฎาคม 2570
@@ -470,34 +1091,29 @@ export default function App() {
           {/* Time-Based Safety and Connection Status Container */}
           <div className="flex flex-wrap items-center gap-3 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/60 shadow-inner">
             
-            {/* Google Authentication Status Badge */}
+            {/* Google Authentication / Simulation Status Badge */}
             {fbUser ? (
-              <div className="flex items-center gap-2 text-xs text-emerald-800 bg-emerald-50/90 py-1.5 px-3 rounded-xl border border-emerald-200 shadow-sm">
+              <div className="flex items-center gap-2 text-xs text-emerald-850 bg-emerald-50/95 py-1.5 px-3 rounded-xl border border-emerald-250/60 shadow-xs">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block"></span>
-                <span className="font-semibold text-slate-700">ลงชื่อเข้าไว้: {fbUser.displayName || fbUser.email}</span>
+                <span className="font-semibold text-slate-700">Cloud: {fbUser.displayName || fbUser.email}</span>
                 <button 
-                  onClick={async () => {
-                    await signOut(auth);
-                    addAuditLog('🔒 สิ้นสุด/ออกจากระบบ Cloud');
-                  }}
-                  className="ml-2 font-bold text-rose-650 hover:text-rose-700 underline cursor-pointer text-[10px]"
+                  onClick={handleLogout}
+                  className="ml-2 font-black text-rose-650 hover:text-rose-700 underline cursor-pointer text-[10px]"
                 >
                   ออกระบบ
                 </button>
               </div>
             ) : (
-              <button
-                onClick={async () => {
-                  try {
-                    await signInWithPopup(auth, googleProvider);
-                  } catch (e) {
-                    addAuditLog(`⚠️ เข้าสู่ระบบล้มเหลว: ${e instanceof Error ? e.message : String(e)}`);
-                  }
-                }}
-                className="flex items-center gap-1.5 text-[11px] font-bold py-1.5 px-3 bg-indigo-650 hover:bg-indigo-750 text-white rounded-xl shadow-xs transition-all duration-200 cursor-pointer focus:outline-none"
-              >
-                <span>ลงชื่อเข้าใช้ Google Coordinated</span>
-              </button>
+              <div className="flex items-center gap-2 text-xs text-indigo-850 bg-indigo-50/95 py-1.5 px-3 rounded-xl border border-indigo-200 shadow-xs">
+                <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: currentUser?.avatarColor || '#4f46e5' }}></span>
+                <span className="font-semibold text-slate-705">สิทธิ์จำลอง: {currentUser?.fullName || 'ผู้ใช้งาน'}</span>
+                <button 
+                  onClick={handleLogout}
+                  className="ml-2 font-black text-rose-650 hover:text-rose-750 underline cursor-pointer text-[10px]"
+                >
+                  ออกระบบ
+                </button>
+              </div>
             )}
 
             {/* Clock */}
@@ -529,55 +1145,6 @@ export default function App() {
 
       {/* Main Container - Dashboard Area */}
       <main className="flex-grow p-4 lg:p-8 max-w-7xl mx-auto w-full grid grid-cols-1 gap-6">
-        
-        {/* Step 2: Role Switcher & Environment Simulator (Highlighting user switching) */}
-        <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden" id="role-simulation-hub">
-          {/* Ambient Glows */}
-          <div className="absolute right-0 top-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute left-1/4 bottom-0 w-60 h-60 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none" />
-
-          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-500/20 px-3.5 py-1.5 rounded-full text-indigo-300 border border-indigo-500/30 font-display">
-                สถานะการจำลองบัญชีผู้ใช้ (Session Identity Simulation Indicator)
-              </span>
-              <h2 className="text-lg font-display font-medium text-white mt-3 flex items-center gap-2">
-                <UserCheck className="w-5 h-5 text-indigo-400 shrink-0" />
-                <span>ขณะนี้ล็อกอินในนาม:</span> 
-                <span className="text-indigo-200 font-bold border-b-2 border-indigo-500 pb-0.5">{currentUser.fullName}</span>
-              </h2>
-              <p className="text-xs text-slate-400 mt-1.5 leading-relaxed font-sans max-w-xl">
-                คลิกสัญลักษณ์ด้านขวาเพื่อสวิตช์ผู้บริหารระบบ (จำลองพฤติกรรมเจ้าหน้าที่ วก. แต่ละท่านเข้ามาลงเวลากำหนดการ)
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2 lg:max-w-md">
-              {DEFAULT_USERS.map((user) => {
-                const isActive = currentUser.id === user.id;
-                return (
-                  <button
-                    key={user.id}
-                    onClick={() => {
-                      setCurrentUser(user);
-                      addAuditLog(`สลับบัญชีผู้ใช้งานจำลองเป็น: ${user.fullName}`);
-                    }}
-                    className={`py-2 px-4 rounded-xl text-xs font-semibold transition-all duration-300 focus:outline-none flex items-center gap-2.5 touch-manipulation cursor-pointer ${
-                      isActive 
-                        ? 'bg-white text-slate-900 shadow-md scale-[1.03] font-bold border border-white' 
-                        : 'bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    <span 
-                      className="w-2.5 h-2.5 rounded-full inline-block shrink-0 ring-4 ring-black/20" 
-                      style={{ backgroundColor: user.avatarColor }}
-                    />
-                    <span>{user.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </section>
 
         {/* Tab Controls for system */}
         <div className="flex border-b border-slate-200/80 gap-1.5 overflow-x-auto scroller-hidden">
@@ -624,8 +1191,8 @@ export default function App() {
             attachedFiles={attachedFiles}
             onAddFile={handleAddFile}
             onRemoveFile={handleRemoveFile}
-            userRole={currentUser.role}
-            currentUserName={currentUser.name}
+            userRole={currentUser?.role || 'executive'}
+            currentUserName={currentUser?.name || ''}
           />
         )}
 
@@ -640,10 +1207,10 @@ export default function App() {
         )}
 
         {activeTab === 'dashboard' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="w-full flex flex-col gap-6">
             
-            {/* LEFT COLUMN: Academic Month Timeline & Calendar Month Grid */}
-            <div className="lg:col-span-7 flex flex-col gap-6">
+            {/* FULL WIDTH: Academic Month Timeline & Calendar Month Grid */}
+            <div className="w-full flex flex-col gap-6">
               
               {/* Monthly picker ribbon - 12 Months scrollable */}
               <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-sm">
@@ -684,28 +1251,64 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Monthly grid calendar */}
+              {/* Monthly or Weekly grid calendar */}
               <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-sm">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between pb-4 border-b border-slate-100 gap-4">
                   <div>
-                    <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 font-display">
+                    <h3 className="text-base font-bold text-slate-900 flex flex-wrap items-center gap-2 font-display">
                       <CalendarIcon className="w-4.5 h-4.5 text-indigo-600" />
-                      มุมมองปฏิทินประจำเดือน {selectedMonth.thaiName} {selectedMonth.beYear}
+                      {calendarViewMode === 'monthly' ? (
+                        <>มุมมองปฏิทินรายเดือน: ประจำเดือน {selectedMonth.thaiName} {selectedMonth.beYear}</>
+                      ) : (
+                        <>มุมมองปฏิทินรายสัปดาห์: สัปดาห์ปัจจุบันของวันที่ {new Date(selectedDateString).getDate()} {getThaiMonthShort(new Date(selectedDateString).getMonth())}</>
+                      )}
                     </h3>
                     <p className="text-xs text-slate-500 mt-1">
-                      คลิกเลือกวันที่ว่างเพื่อวางแผนและตรวจสอบความหนาแน่นทีม วก. แบบ Heatmap
+                      คลิกเลือกวันที่ว่างเพื่อตรวจสอบความหนาแน่นทีม วก. แบบ Heatmap หรือพิมพ์บันทึกได้เลยในแต่ละฝั่งช่วงเช้า/บ่าย
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      onClick={handleSimulateTeamActivity}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] py-1.5 px-3.5 rounded-xl shadow-xs hover:shadow-md flex items-center gap-1.5 transition-all duration-200 cursor-pointer focus:outline-none"
-                      title="สุ่มตอบรับของผู้บริหารท่านอื่นเพื่อทดลองตารางสีทับซ้อน (Heatmap)"
-                    >
-                      <RefreshCw className="w-3 h-3 text-emerald-100" />
-                      <span>จำลองผู้โหวตเวลาร่วม</span>
-                    </button>
+                  {/* Responsive Elegant Calendar Height Slider */}
+                  <div className="flex flex-col gap-1.5 w-full lg:w-64">
+                    <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
+                      <span className="flex items-center gap-1">
+                        <Sliders className="w-3.5 h-3.5 text-indigo-500" />
+                        ปรับความสูงตารางนัดหมาย
+                      </span>
+                      <span className="font-mono text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded text-[10px]">
+                        {calendarCardHeight}px
+                      </span>
+                    </div>
+                    <div className="relative w-full h-5 flex items-center">
+                      <div className="w-full h-1.5 bg-slate-100 rounded-full"></div>
+                      <div 
+                        style={{ width: `${((calendarCardHeight - 180) / (800 - 180)) * 100}%` }}
+                        className="absolute h-1.5 bg-indigo-500 rounded-full left-0 pointer-events-none"
+                      ></div>
+                      <div 
+                        style={{ left: `calc(${((calendarCardHeight - 180) / (800 - 180)) * 100}% - 6px)` }}
+                        className="absolute w-3 h-4 bg-indigo-600 rounded-sm border border-white cursor-ew-resize flex items-center justify-center shadow-md hover:bg-indigo-700 hover:scale-105 active:bg-indigo-800 transition-transform duration-75 pointer-events-none"
+                        title="คลิกลากซ้ายขวาเพื่อคุมความสูง"
+                      >
+                        <div className="w-[1px] h-2 bg-white"></div>
+                      </div>
+                      <input
+                        type="range"
+                        min="180"
+                        max="800"
+                        value={calendarCardHeight}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setCalendarCardHeight(val);
+                        }}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                    </div>
+                    <div className="text-[9px] text-slate-400 font-sans flex justify-between select-none">
+                      <span>180px</span>
+                      <span className="italic text-indigo-400">ดึงขอบล่างของวันได้เช่นกัน!</span>
+                      <span>800px</span>
+                    </div>
                   </div>
                 </div>
 
@@ -722,21 +1325,33 @@ export default function App() {
                     </div>
                   ))}
 
-                  {/* Offset empty spaces */}
-                  {paddingArray.map((p) => (
+                  {/* Offset empty spaces (only in monthly view) */}
+                  {calendarViewMode === 'monthly' && paddingArray.map((p) => (
                     <div key={`pad-${p}`} className="aspect-square bg-slate-50/20 rounded-xl border border-dashed border-slate-100" />
                   ))}
 
-                  {/* Calendar Days */}
-                  {daysArray.map((day) => {
-                    const monthStr = String(selectedMonth.index + 1).padStart(2, '0');
-                    const dayStr = String(day).padStart(2, '0');
-                    const curDateStr = `${selectedMonth.year}-${monthStr}-${dayStr}`;
+                  {/* Calendar Days (Monthly or Weekly) */}
+                  {(calendarViewMode === 'monthly'
+                    ? daysArray.map(day => {
+                        const monthStr = String(selectedMonth.index + 1).padStart(2, '0');
+                        const dayStr = String(day).padStart(2, '0');
+                        const curDateStr = `${selectedMonth.year}-${monthStr}-${dayStr}`;
+                        return { dayLabel: String(day), curDateStr };
+                      })
+                    : getWeeklyDates(selectedDateString).map(dObj => {
+                        const year = dObj.getFullYear();
+                        const monthIndex = dObj.getMonth();
+                        const mStr = String(monthIndex + 1).padStart(2, '0');
+                        const day = dObj.getDate();
+                        const curDateStr = `${year}-${mStr}-${String(day).padStart(2, '0')}`;
+                        return { dayLabel: `${day} ${getThaiMonthShort(monthIndex)}`, curDateStr };
+                      })
+                  ).map((item) => {
+                    const curDateStr = item.curDateStr;
                     const isSelected = selectedDateString === curDateStr;
 
                     // Compute heatmap density level for this day
                     const daySched = getDaySchedule(curDateStr);
-                    let totalSlotsCount = Object.keys(daySched.slots).length;
                     let freeOverlaps = 0;
                     let busyOverlaps = 0;
 
@@ -751,541 +1366,247 @@ export default function App() {
                     let cellBorder = 'border-slate-200/80';
                     
                     if (isSelected) {
-                      cellBg = 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-250';
-                      cellBorder = 'border-indigo-600';
+                      cellBg = 'bg-indigo-650 text-white shadow-md ring-2 ring-indigo-250';
+                      cellBorder = 'border-indigo-650';
                     } else if (freeOverlaps > 0) {
                       // heatmap green gradients
                       if (freeOverlaps >= 8) {
                         cellBg = 'bg-emerald-100/95 border-emerald-300 text-emerald-950 font-semibold';
                       } else if (freeOverlaps >= 4) {
-                        cellBg = 'bg-emerald-50 border-emerald-200 text-emerald-900';
+                        cellBg = 'bg-emerald-50 border-emerald-200 text-emerald-950 font-semibold';
                       } else {
                         cellBg = 'bg-slate-50 border-emerald-100 text-emerald-800';
                       }
                     }
 
+                    const morningSlots = Object.entries(daySched.slots).filter(([hr]) => {
+                      const hourNum = parseInt(hr.split(':')[0], 10);
+                      return hourNum < 12;
+                    });
+                    const afternoonSlots = Object.entries(daySched.slots).filter(([hr]) => {
+                      const hourNum = parseInt(hr.split(':')[0], 10);
+                      return hourNum >= 12;
+                    });
+
                     return (
-                      <button
-                        key={day}
+                      <div
+                        key={curDateStr}
                         onClick={() => {
                           setSelectedDateString(curDateStr);
-                          addAuditLog(`เลือกวันที่: ${day} ${selectedMonth.thaiName} ${selectedMonth.beYear}`);
+                          addAuditLog(`เลือกวันที่: ${item.dayLabel}`);
                         }}
-                        className={`aspect-square p-2 flex flex-col justify-between border rounded-xl font-medium transition-all duration-200 text-xs cursor-pointer focus:outline-none relative ${cellBg} ${cellBorder}`}
+                        style={{ height: `${calendarCardHeight}px` }}
+                        className={`flex flex-col border rounded-xl font-medium transition-all duration-150 text-xs cursor-pointer relative overflow-hidden select-none ${
+                          isSelected ? 'ring-2 ring-indigo-250 border-indigo-500' : ''
+                        } ${cellBg} ${cellBorder}`}
                       >
-                        <span className="font-bold self-start mt-0.5 ml-0.5">{day}</span>
-                        
-                        {/* Day Status Badges (Heatmap markers) */}
-                        <div className="w-full flex-grow flex items-end justify-center">
-                          {freeOverlaps > 0 && (
-                            <div className="flex flex-col gap-0.5 w-full">
-                              <span className={`text-[9px] font-bold block truncate text-center ${isSelected ? 'text-indigo-100' : 'text-emerald-700'}`}>
-                                ว่าง {freeOverlaps} ค.
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Legend explanatory notes */}
-                <div className="flex flex-wrap items-center justify-center gap-4 mt-5 pt-3 border-t border-slate-100 text-[11px] text-slate-500">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-3.5 h-3.5 rounded bg-white border border-slate-200 block"></span>
-                    <span>ยังไม่มีการลงเวลา</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-3.5 h-3.5 rounded bg-emerald-50 border border-emerald-200 block"></span>
-                    <span>ว่างบางส่วน (1 - 3 ผู้บริหาร)</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-3.5 h-3.5 rounded bg-emerald-100 border border-emerald-300 block"></span>
-                    <span>ทีมว่างหนาแน่น (4+ ผู้บริหาร)</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Time Security Log Container */}
-              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5 text-blue-600 animate-none" />
-                    บันทึกประวัติความปลอดภัยเชิงเวลา (Time-based Audit History)
-                  </h4>
-                  <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-2.5 py-0.5 rounded-full border border-slate-200">
-                    ป้องกันการสวมรอย
-                  </span>
-                </div>
-
-                <div className="bg-slate-950 text-slate-400 p-3 rounded-lg font-mono text-[10px] h-[100px] overflow-y-auto space-y-1">
-                  {auditLogs.map((log, idx) => (
-                    <div key={idx} className="truncate line-clamp-1">
-                      <span className="text-emerald-500">&gt;</span> {log}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* RIGHT COLUMN: SLOT AVAILABILITY SELECTOR & OVERLAP HEATMAP LIST */}
-            <div className="lg:col-span-5 flex flex-col gap-6">
-              
-              <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-sm">
-                <div className="pb-3 border-b border-slate-100 mb-4 font-sans">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <span className="text-[10px] font-bold uppercase text-indigo-700 bg-indigo-50 py-1 px-3 rounded-full border border-indigo-100/60 font-display">
-                      ขั้นตอน 3.2 - 3.5: จัดการช่วงโอกาสเวลา
-                    </span>
-                    
-                    {/* Dynamic View Selector */}
-                    <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/60 scale-95 origin-right shrink-0">
-                      <button
-                        onClick={() => {
-                          setDashboardViewMode('grid');
-                        }}
-                        className={`py-1.5 px-3 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer focus:outline-none ${
-                          dashboardViewMode === 'grid'
-                            ? 'bg-white text-indigo-700 shadow-xs border border-slate-200/50 font-bold'
-                            : 'text-slate-500 hover:text-slate-800'
-                        }`}
-                        title="แก้ไขและระบุกิจกรรมผู้บริหารทุกคนสะดวกรวดเร็วในตารางกริด"
-                      >
-                        <Table className="w-3 h-3" />
-                        <span>ตารางกริด (Grid Map)</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          setDashboardViewMode('cards');
-                        }}
-                        className={`py-1.5 px-3 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer focus:outline-none ${
-                          dashboardViewMode === 'cards'
-                            ? 'bg-white text-indigo-700 shadow-xs border border-slate-200/50 font-bold'
-                            : 'text-slate-500 hover:text-slate-800'
-                        }`}
-                        title="ดูและแก้ไขแบบทีละชั่วโมงละเอียด"
-                      >
-                        <Clock className="w-3 h-3" />
-                        <span>การ์ดช่วงเวลา (Cards)</span>
-                      </button>
-                    </div>
-                  </div>
-                  <h3 className="text-base font-bold text-slate-900 mt-2.5 flex items-center gap-1.5 font-display">
-                    <Clock className="w-4.5 h-4.5 text-indigo-600" />
-                    วันที่ {new Date(selectedDateString).toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long' })}
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {dashboardViewMode === 'grid' 
-                      ? '💡 เคล็ดลับ: คลิกช่อง (Cell) ทับตรงชื่อผู้บริหารในเวลาใดก็ได้เพื่อ ระบุกิจกรรมและเวลา ลงในตารางกริด' 
-                      : `สำหรับผู้บริหาร: ${currentUser.fullName} สามารถแก้ไข ขีดทับ หรือล้างตารางเวลาช่องนี้`
-                    }
-                  </p>
-                </div>
-
-                {dashboardViewMode === 'grid' ? (
-                  <div className="space-y-4">
-                    {/* Live grid comparison board */}
-                    <div className="overflow-x-auto rounded-xl border border-slate-250/70 bg-white shadow-inner max-h-[500px] overflow-y-auto">
-                      <table className="min-w-full text-xs text-left border-collapse relative">
-                        <thead className="bg-slate-50/90 border-b border-slate-200 text-slate-500 font-bold uppercase font-display sticky top-0 z-20 backdrop-blur-xs">
-                          <tr>
-                            <th className="py-2.5 px-3 text-slate-600 sticky left-0 bg-slate-100/90 z-25 w-24 border-r border-slate-200">
-                              ช่องเวลา
-                            </th>
-                            {DEFAULT_USERS.map((user) => (
-                              <th key={user.id} className="py-2.5 px-3 text-center min-w-[95px] border-r border-slate-200">
-                                <span className="text-[11px] font-bold text-slate-755 truncate block" title={user.fullName}>
-                                  {user.name}
-                                </span>
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {HOURLY_SLOTS.map((hour) => {
-                            const daySched = getDaySchedule(selectedDateString);
-                            const avails = daySched.slots[hour] || [];
-
-                            return (
-                              <tr key={hour} className="hover:bg-slate-50/50 transition-colors">
-                                {/* Time row header */}
-                                <td className="py-2.5 px-2 font-mono font-semibold text-slate-700 bg-slate-50 sticky left-0 z-10 border-r border-slate-200 flex items-center justify-between gap-1 h-12">
-                                  <span>{hour} น.</span>
-                                </td>
-
-                                {/* Cells */}
-                                {DEFAULT_USERS.map((user) => {
-                                  const uAv = avails.find(a => a.userId === user.id);
-                                  const isSelectedToEdit = editingCell?.hour === hour && editingCell?.userId === user.id;
-
-                                  let cellBg = 'bg-white';
-                                  let statusBadgeText = 'ไม่ได้ลงเวลา';
-                                  let statusBadgeColor = 'bg-slate-50 text-slate-400 border-slate-150';
-
-                                  if (uAv) {
-                                    if (uAv.status === 'available') {
-                                      cellBg = 'bg-emerald-50/20 hover:bg-emerald-50/40';
-                                      statusBadgeText = 'ว่าง';
-                                      statusBadgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-150 shadow-xs';
-                                    } else if (uAv.status === 'busy') {
-                                      cellBg = 'bg-rose-50/15 hover:bg-rose-50/35';
-                                      statusBadgeText = 'ไม่ว่าง';
-                                      statusBadgeColor = 'bg-rose-50 text-rose-700 border-rose-150 shadow-xs';
-                                    }
-                                  }
-
-                                  return (
-                                    <td 
-                                      key={user.id}
-                                      onClick={() => {
-                                        if (isLocked) {
-                                          alert('⚠️ ตารางถูกปิดล็อกด้วยระบบความปลอดภัยเชิงเวลา (Time-based Server Lock)');
-                                          return;
-                                        }
-                                        setEditingCell({ hour, userId: user.id });
-                                        // Auto-simulate clicking that user
-                                        setCurrentUser(user);
-                                      }}
-                                      className={`p-1 text-center border-r border-slate-150 transition-all cursor-pointer relative h-12 group select-none ${cellBg} ${
-                                        isSelectedToEdit ? 'ring-2 ring-indigo-500 ring-inset bg-indigo-50/30' : ''
-                                      }`}
-                                    >
-                                      <div className="flex flex-col items-center justify-center h-full gap-0.5">
-                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 border rounded-full scale-90 ${statusBadgeColor}`}>
-                                          {statusBadgeText}
-                                        </span>
-                                        {uAv && uAv.note ? (
-                                          <span 
-                                            className={`text-[9px] text-slate-500 font-sans max-w-[85px] truncate block ${
-                                              uAv.isStruckThrough ? 'line-through text-slate-400 decoration-rose-500 decoration-1 italic' : 'font-medium'
-                                            }`}
-                                            title={uAv.note}
-                                          >
-                                            {uAv.note}
-                                          </span>
-                                        ) : (
-                                          <span className="text-[8px] text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            + ระบุกิจกรรม
-                                          </span>
-                                        )}
-                                      </div>
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Quick activity slot form */}
-                    {editingCell && (() => {
-                      const targetUser = DEFAULT_USERS.find(u => u.id === editingCell.userId);
-                      if (!targetUser) return null;
-
-                      const daySched = getDaySchedule(selectedDateString);
-                      const avails = daySched.slots[editingCell.hour] || [];
-                      const currentAv = avails.find(a => a.userId === editingCell.userId);
-                      const currentNoteVal = tempNoteInputs[editingCell.hour] !== undefined 
-                        ? tempNoteInputs[editingCell.hour] 
-                        : (currentAv?.note || '');
-
-                      return (
-                        <div className="bg-gradient-to-br from-indigo-50/60 to-slate-50 border border-indigo-200/80 rounded-2xl p-4 mt-4 space-y-3.5 shadow-sm">
-                          <div className="flex items-center justify-between border-b border-indigo-100/50 pb-2">
+                        {/* Upper Compartment: Morning (ช่วงเช้า) */}
+                        <div className="flex-1 flex flex-col min-h-0 border-b border-slate-200">
+                          {/* Morning Header */}
+                          <div className="p-2 bg-slate-50/60 flex items-center justify-between border-b border-dashed border-slate-150">
                             <div className="flex items-center gap-1.5">
-                              <span 
-                                className="w-2.5 h-2.5 rounded-full" 
-                                style={{ backgroundColor: targetUser.avatarColor }}
-                              />
-                              <h4 className="text-xs font-bold text-slate-800">
-                                ระบุกิจกรรม: <span className="text-indigo-750 font-extrabold">{targetUser.fullName}</span> (เวลา {editingCell.hour} น.)
-                              </h4>
-                            </div>
-                            <button 
-                              onClick={() => setEditingCell(null)}
-                              className="text-[10px] text-slate-400 hover:text-indigo-600 font-bold bg-white border border-slate-200 hover:border-indigo-200 px-2 py-0.5 rounded-lg transition-colors"
-                            >
-                              ปิด [X]
-                            </button>
-                          </div>
-
-                          <div className="space-y-3">
-                            <div className="grid grid-cols-3 gap-2">
-                              <button
-                                onClick={() => {
-                                  handleUpdateAvailability(editingCell.hour, 'available', currentNoteVal, currentAv?.isStruckThrough);
-                                }}
-                                className={`py-1.5 px-3 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1 cursor-pointer focus:outline-none ${
-                                  currentAv?.status === 'available'
-                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                                }`}
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                                <span>ว่าง</span>
-                              </button>
-
-                              <button
-                                onClick={() => {
-                                  handleUpdateAvailability(editingCell.hour, 'busy', currentNoteVal, currentAv?.isStruckThrough);
-                                }}
-                                className={`py-1.5 px-3 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1 cursor-pointer focus:outline-none ${
-                                  currentAv?.status === 'busy'
-                                    ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
-                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                                }`}
-                              >
-                                <X className="w-3.5 h-3.5" />
-                                <span>ไม่ว่าง</span>
-                              </button>
-
-                              <button
-                                onClick={() => {
-                                  handleClearSlot(editingCell.hour);
-                                  setEditingCell(null);
-                                }}
-                                className="py-1.5 px-3 rounded-xl text-xs font-bold border bg-white border-slate-200 text-slate-500 hover:bg-slate-50 flex items-center justify-center gap-1 cursor-pointer focus:outline-none"
-                              >
-                                <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                                <span>ล้างช่อง</span>
-                              </button>
-                            </div>
-
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-slate-500 block">ระบุกิจกรรม และ รายละเอียดเวลาตารางกริด (เช่น "สอน วก.102 (09:00 - 11:30)")</label>
-                              <div className="flex gap-2">
-                                <input
-                                  type="text"
-                                  value={currentNoteVal}
-                                  onChange={(e) => handleUpdateNoteText(editingCell.hour, e.target.value)}
-                                  placeholder="ระบุกิจกรรม / หัวข้อประชุม / โครงการวิชาการ..."
-                                  className="text-xs py-2 px-3 border border-slate-200 rounded-xl w-full bg-white focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100"
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      handleUpdateAvailability(
-                                        editingCell.hour, 
-                                        currentAv?.status || 'available', 
-                                        currentNoteVal, 
-                                        currentAv?.isStruckThrough
-                                      );
-                                      addAuditLog(`อัปเดตกิจกรรม ${targetUser.name} [${editingCell.hour}]: "${currentNoteVal}"`);
-                                      setEditingCell(null);
-                                    }
-                                  }}
-                                />
-                                <button
-                                  onClick={() => {
-                                    handleUpdateAvailability(
-                                      editingCell.hour, 
-                                      currentAv?.status || 'available', 
-                                      currentNoteVal, 
-                                      currentAv?.isStruckThrough
-                                    );
-                                    addAuditLog(`บันทึกตารางกริด ${targetUser.name} [${editingCell.hour} น.]: "${currentNoteVal}"`);
-                                    setEditingCell(null);
-                                  }}
-                                  className="bg-indigo-650 hover:bg-indigo-700 text-white font-bold text-xs py-2 px-4 rounded-xl shrink-0 transition-colors shadow-xs"
-                                >
-                                  บันทึก
-                                </button>
-                              </div>
-                            </div>
-
-                            {currentAv && currentAv.note && (
-                              <div className="flex items-center justify-between pt-1 border-t border-indigo-100/30">
-                                <span className="text-[9px] text-slate-400">ขีดทับหรือคืนค่ากิจกรรมชั่วคราว:</span>
-                                <button
-                                  onClick={() => {
-                                    handleToggleStrikeThrough(editingCell.hour);
-                                  }}
-                                  className={`py-1 px-2.5 rounded-lg text-[9px] font-bold border transition-all cursor-pointer ${
-                                    currentAv.isStruckThrough
-                                      ? 'bg-amber-50 border-amber-200 text-amber-700 font-bold line-through'
-                                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                                  }`}
-                                >
-                                  {currentAv.isStruckThrough ? 'ยกเลิกขีดทับ' : 'ขีดทับกิจกรรม'}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {HOURLY_SLOTS.map((hour) => {
-                      const daySched = getDaySchedule(selectedDateString);
-                      const avails = daySched.slots[hour] || [];
-                    
-                    // Match the slot entry of CURRENT user
-                    const userAvail = avails.find(a => a.userId === currentUser.id);
-                    const isAvailable = userAvail?.status === 'available';
-                    const isBusy = userAvail?.status === 'busy';
-                    const isNone = !userAvail || userAvail.status === 'none';
-                    const currentNoteVal = tempNoteInputs[hour] !== undefined ? tempNoteInputs[hour] : (userAvail?.note || '');
-
-                    // Total counts for visual heatmap overlap block
-                    const totalAvailable = avails.filter(a => a.status === 'available').length;
-                    const totalBusy = avails.filter(a => a.status === 'busy').length;
-                    const heatmapColorClass = 
-                      totalAvailable === 0 
-                        ? 'bg-slate-50/40 border-slate-100' 
-                        : totalAvailable >= 4 
-                        ? 'bg-emerald-50 border-emerald-250/70 text-emerald-950 font-medium' 
-                        : 'bg-indigo-50/20 border-indigo-100';
-
-                    return (
-                      <div 
-                        key={hour} 
-                        className={`p-4 rounded-xl border transition-all duration-200 ${heatmapColorClass}`}
-                      >
-                        {/* Time label and overlay heat indicators */}
-                        <div className="flex items-center justify-between mb-2.5 pb-2 border-b border-dashed border-slate-200">
-                          <span className="text-xs font-bold text-slate-800 flex items-center gap-1 bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-200 font-mono">
-                            <Clock className="w-3.5 h-3.5 text-indigo-600" />
-                            {hour} น.
-                          </span>
-
-                          {/* 3.3 Overlap Indicator Pill */}
-                          <div className="flex items-center gap-1.5 font-display text-[10px] font-bold">
-                            {totalAvailable > 0 && (
-                              <span className="text-emerald-800 bg-emerald-100/80 rounded-lg px-2 py-0.5 border border-emerald-200/50">
-                                ว่าง {totalAvailable} คน
+                              <span className={`font-bold text-sm leading-none ${isSelected ? 'text-indigo-900 font-extrabold text-base' : 'text-slate-800'}`}>
+                                {item.dayLabel}
                               </span>
-                            )}
-                            {totalBusy > 0 && (
-                              <span className="text-rose-800 bg-rose-100/80 rounded-lg px-2 py-0.5 border border-rose-200/50">
-                                ไม่ว่าง {totalBusy} คน
-                              </span>
-                            )}
-                            {totalAvailable === 0 && totalBusy === 0 && (
-                              <span className="text-[10px] text-slate-400 font-semibold italic">
-                                ยังไม่มีท่านใดตอบรับ
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Custom Form for adding time slot data */}
-                        <div className="space-y-3">
-                          {/* Toggle status buttons */}
-                          <div className="grid grid-cols-3 gap-1.5 shrink-0">
-                            <button
-                              onClick={() => handleUpdateAvailability(hour, 'available', currentNoteVal, userAvail?.isStruckThrough)}
-                              className={`py-1.5 px-2 rounded-xl text-xs font-bold transition-all duration-200 focus:outline-none flex items-center justify-center gap-1 cursor-pointer touch-manipulation ${
-                                isAvailable
-                                  ? 'bg-emerald-600 text-white shadow-sm'
-                                  : 'bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 shadow-xs'
-                              }`}
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                              <span>ว่าง</span>
-                            </button>
-
-                            <button
-                              onClick={() => handleUpdateAvailability(hour, 'busy', currentNoteVal, userAvail?.isStruckThrough)}
-                              className={`py-1.5 px-2 rounded-xl text-xs font-bold transition-all duration-200 focus:outline-none flex items-center justify-center gap-1 cursor-pointer touch-manipulation ${
-                                isBusy
-                                  ? 'bg-rose-600 text-white shadow-sm'
-                                  : 'bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 shadow-xs'
-                              }`}
-                            >
-                              <X className="w-3.5 h-3.5" />
-                              <span>ไม่ว่าง</span>
-                            </button>
-
-                            <button
-                              onClick={() => handleClearSlot(hour)}
-                              className={`py-1.5 px-2 rounded-xl text-xs font-bold transition-all duration-200 focus:outline-none flex items-center justify-center gap-1 cursor-pointer touch-manipulation ${
-                                isNone
-                                  ? 'bg-slate-800 text-white shadow-sm'
-                                  : 'bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 shadow-xs'
-                              }`}
-                              title="ยกเลิกการกรอกข้อมูลเวลานี้"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>ล้างช่อง</span>
-                            </button>
-                          </div>
-
-                          {/* 3.4 Custom Note Text Input Field */}
-                          <div className="flex flex-col md:flex-row gap-2">
-                            <input
-                              type="text"
-                              value={currentNoteVal}
-                              onChange={(e) => handleUpdateNoteText(hour, e.target.value)}
-                              placeholder="ระบุกิจกรรม/ภารกิจ/รายละเอียดห้องประชุม..."
-                              className="text-xs py-2 px-3 border border-slate-200 rounded-xl w-full focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 bg-white placeholder:text-slate-400 transition-all shadow-inner font-sans"
-                            />
-
-                            {/* 3.5 Strike out toggle tool */}
-                            {userAvail && userAvail.note && (
-                              <div className="flex gap-1.5 shrink-0">
-                                <button
-                                  onClick={() => handleToggleStrikeThrough(hour)}
-                                  className={`py-1.5 px-3 rounded-xl text-xs font-semibold focus:outline-none transition-all duration-200 flex items-center justify-center shrink-0 border cursor-pointer ${
-                                    userAvail.isStruckThrough
-                                      ? 'bg-indigo-100 border-indigo-200 text-indigo-700 font-bold line-through'
-                                      : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-xs'
-                                  }`}
-                                  title="ขีดทับข้อความชั่วคราวเพื่อแสดงนัดหมายยกเลิก"
-                                >
-                                  ขีดทับ
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Collaborative matrix displaying who is doing what in this slot */}
-                        {avails.length > 0 && (
-                          <div className="mt-3.5 pt-3 border-t border-slate-200/60 space-y-2 bg-white/60 p-3 rounded-xl border border-slate-100">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-display">
-                              การกรอกเวลารายบุคคล (Real-time Overlap Monitor)
-                            </p>
-                            <div className="flex flex-col gap-1.5 font-sans">
-                              {avails.map((av) => (
-                                <div key={av.userId} className="flex items-center justify-between text-xs py-0.5">
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <span 
-                                      className="w-2.5 h-2.5 rounded-full shrink-0 border border-white" 
-                                      style={{ backgroundColor: DEFAULT_USERS.find(u => u.id === av.userId)?.avatarColor || '#cbd5e1' }}
-                                    />
-                                    <span className="font-semibold text-slate-800 shrink-0">{av.userName}:</span>
-                                    {av.note && (
-                                      <span className={`text-[11px] text-slate-500 truncate ${
-                                        av.isStruckThrough ? 'line-through text-slate-400 decoration-rose-500 decoration-2 italic' : ''
-                                      }`}>
-                                        {av.note}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                                    av.status === 'available'
-                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-100/60'
-                                      : 'bg-rose-50 text-rose-700 border border-rose-100/60'
-                                  }`}>
-                                    {av.status === 'available' ? 'ว่าง' : 'ไม่ว่าง'}
-                                  </span>
+                              <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded select-none">☀️ เช้า</span>
+                            </div>
+                            
+                            {/* Morning Stats */}
+                            {(() => {
+                              let morningFree = 0;
+                              let morningBusy = 0;
+                              morningSlots.forEach(([_, avails]) => {
+                                avails.forEach(av => {
+                                  if (av.status === 'available') morningFree++;
+                                  if (av.status === 'busy') morningBusy++;
+                                });
+                              });
+                              return (
+                                <div className="flex gap-1 select-none">
+                                  {morningFree > 0 && (
+                                    <span className="text-[8px] px-1 py-0.2 rounded font-bold shrink-0 bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                      ว่าง {morningFree}
+                                    </span>
+                                  )}
+                                  {morningBusy > 0 && (
+                                    <span className="text-[8px] px-1 py-0.2 rounded font-bold shrink-0 bg-rose-50 text-rose-650 border border-rose-100">
+                                      ทับ {morningBusy}
+                                    </span>
+                                  )}
                                 </div>
-                              ))}
+                              );
+                            })()}
+                          </div>
+
+                          {/* Morning Content Area */}
+                          <div className="p-2 flex-grow overflow-y-auto space-y-1 min-h-0 bg-white flex flex-col justify-between">
+                            {/* Morning Slots list */}
+                            <div className="space-y-1">
+                              {morningSlots.map(([hr, avails]) => {
+                                const activeAvails = avails.filter(av => av.status !== 'none');
+                                if (activeAvails.length === 0) return null;
+                                return (
+                                  <div key={hr} className="flex flex-col gap-0.5 border-b border-slate-50 pb-0.5 last:border-0" onClick={(e) => e.stopPropagation()}>
+                                    <span className="font-bold text-slate-500 font-mono text-[9px]">{hr} น. :</span>
+                                    <div className="flex flex-wrap gap-0.5">
+                                      {activeAvails.map(av => (
+                                        <span 
+                                          key={av.userId} 
+                                          className={`px-1 py-0.2 rounded-sm text-[8px] ${
+                                            av.status === 'available' 
+                                              ? 'bg-emerald-50 text-emerald-700' 
+                                              : 'bg-rose-50 text-rose-600 line-through decoration-slate-400'
+                                          }`}
+                                          title={av.note || ''}
+                                        >
+                                          {av.userName}{av.note ? ` (${av.note})` : ''}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Direct Note Typing area for Morning Compartment */}
+                            <div className="mt-1 pt-1 border-t border-slate-100" onClick={(e) => e.stopPropagation()}>
+                              <textarea
+                                value={daySched.morningNote || ''}
+                                onChange={(e) => handleUpdateCompartmentNote(curDateStr, 'morning', e.target.value)}
+                                placeholder="ไม่มีนัดช่วงเช้า / พิมพ์บันทึก..."
+                                disabled={isLocked}
+                                rows={2}
+                                className={`w-full text-[9px] p-1 rounded-md border border-slate-100 bg-slate-50/50 text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-1 focus:ring-indigo-500/20 resize-none focus:outline-none transition-all ${isLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
+                              />
                             </div>
                           </div>
-                        )}
+                        </div>
+
+                        {/* Solid middle dividing border line (Splitting upper and lower boxes exactly) */}
+                        <div className="border-t border-slate-200 z-10"></div>
+
+                        {/* Lower Compartment: Afternoon (ช่วงบ่าย) */}
+                        <div className="flex-Grow flex flex-col min-h-0 bg-white">
+                          {/* Afternoon Header */}
+                          <div className="p-2 bg-amber-50/10 flex items-center justify-between border-b border-dashed border-slate-150">
+                            <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1 py-0.5 rounded select-none">⛅ บ่าย</span>
+                            
+                            {/* Afternoon Stats */}
+                            {(() => {
+                              let afternoonFree = 0;
+                              let afternoonBusy = 0;
+                              afternoonSlots.forEach(([_, avails]) => {
+                                avails.forEach(av => {
+                                  if (av.status === 'available') afternoonFree++;
+                                  if (av.status === 'busy') afternoonBusy++;
+                                });
+                              });
+                              return (
+                                <div className="flex gap-1 select-none">
+                                  {afternoonFree > 0 && (
+                                    <span className="text-[8px] px-1 py-0.2 rounded font-bold shrink-0 bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                      ว่าง {afternoonFree}
+                                    </span>
+                                  )}
+                                  {afternoonBusy > 0 && (
+                                    <span className="text-[8px] px-1 py-0.2 rounded font-bold shrink-0 bg-rose-50 text-rose-650 border border-rose-100">
+                                      ทับ {afternoonBusy}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+
+                          {/* Afternoon Content Area */}
+                          <div className="p-2 flex-grow overflow-y-auto space-y-1 min-h-0 flex flex-col justify-between">
+                            {/* Afternoon Slots list */}
+                            <div className="space-y-1">
+                              {afternoonSlots.map(([hr, avails]) => {
+                                const activeAvails = avails.filter(av => av.status !== 'none');
+                                if (activeAvails.length === 0) return null;
+                                return (
+                                  <div key={hr} className="flex flex-col gap-0.5 border-b border-slate-50 pb-0.5 last:border-0" onClick={(e) => e.stopPropagation()}>
+                                    <span className="font-bold text-slate-500 font-mono text-[9px]">{hr} น. :</span>
+                                    <div className="flex flex-wrap gap-0.5">
+                                      {activeAvails.map(av => (
+                                        <span 
+                                          key={av.userId} 
+                                          className={`px-1 py-0.2 rounded-sm text-[8px] ${
+                                            av.status === 'available' 
+                                              ? 'bg-emerald-50 text-emerald-700' 
+                                              : 'bg-rose-50 text-rose-600 line-through decoration-slate-400'
+                                          }`}
+                                          title={av.note || ''}
+                                        >
+                                          {av.userName}{av.note ? ` (${av.note})` : ''}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Direct Note Typing area for Afternoon Compartment */}
+                            <div className="mt-1 pt-1 border-t border-slate-100" onClick={(e) => e.stopPropagation()}>
+                              {daySched.dailyNote && (
+                                <p className="text-[8px] font-sans leading-tight text-slate-500 mb-1 max-h-[16px] overflow-y-auto whitespace-pre-wrap break-words italic select-none">
+                                  📝 โน้ตเดิม: {daySched.dailyNote}
+                                </p>
+                              )}
+                              <textarea
+                                value={daySched.afternoonNote || ''}
+                                onChange={(e) => handleUpdateCompartmentNote(curDateStr, 'afternoon', e.target.value)}
+                                placeholder="ไม่มีนัดช่วงบ่าย / พิมพ์บันทึก..."
+                                disabled={isLocked}
+                                rows={2}
+                                className={`w-full text-[9px] p-1 rounded-md border border-slate-100 bg-slate-50/50 text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-1 focus:ring-indigo-500/20 resize-none focus:outline-none transition-all ${isLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Drag and pull down border line handle - Google Docs style */}
+                        <div
+                          onMouseDown={(e) => handleMouseDownOnResizer(e)}
+                          onTouchStart={(e) => handleTouchStartOnResizer(e)}
+                          className={`absolute bottom-0 left-0 right-0 h-2.5 bg-slate-100 hover:bg-indigo-500 active:bg-indigo-700 transition-colors cursor-ns-resize z-20 flex items-center justify-center group ${isResizing ? 'bg-indigo-400/30' : ''} no-print`}
+                          title="ดึงขอบนี้ลงเพื่อปรับความสูงตารางนัดหมายทั้งหมด (เหมือน Google Docs)"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                          }}
+                        >
+                          <div className="w-8 h-[2px] bg-slate-300 group-hover:bg-white rounded-full"></div>
+                        </div>
                       </div>
                     );
                   })}
                 </div>
-              )}
-            </div>
+              </div>
 
-            </div>
+                {/* Time Security Log Container */}
+                <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm no-print" id="audit-log-panel">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-blue-600 animate-none" />
+                      บันทึกประวัติความปลอดภัยเชิงเวลา (Time-based Audit History)
+                    </h4>
+                    <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-2.5 py-0.5 rounded-full border border-slate-200">
+                      ป้องกันการสวมรอย
+                    </span>
+                  </div>
 
+                  <div className="bg-slate-950 text-slate-400 p-3 rounded-lg font-mono text-[10px] h-[100px] overflow-y-auto space-y-1">
+                    {auditLogs.map((log, idx) => (
+                      <div key={idx} className="truncate line-clamp-1">
+                        <span className="text-emerald-500">&gt;</span> {log}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+            </div>
           </div>
         )}
       </main>
