@@ -24,7 +24,12 @@ import {
   Database,
   Table,
   Edit,
-  Type
+  Type,
+  Bold,
+  Italic,
+  Underline,
+  Highlighter,
+  Eraser
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -121,6 +126,64 @@ export default function App() {
   // Custom height resizer for Google Doc feel
   const [calendarCardHeight, setCalendarCardHeight] = useState<number>(310);
   const [calendarFontSize, setCalendarFontSize] = useState<number>(10);
+  const [activeEditField, setActiveEditField] = useState<{ dateStr: string; type: 'morning' | 'afternoon' } | null>(null);
+  const [activeFontColorDropdown, setActiveFontColorDropdown] = useState<boolean>(false);
+  const [activeHighlightDropdown, setActiveHighlightDropdown] = useState<boolean>(false);
+
+  const applyFormatting = (tag: 'b' | 'i' | 'u' | 'color' | 'bg' | 'clear', param?: string) => {
+    if (!activeEditField) return;
+    const targetId = `textarea-${activeEditField.type}-${activeEditField.dateStr}`;
+    const textarea = document.getElementById(targetId) as HTMLTextAreaElement | null;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+    const selectedText = text.substring(start, end) || '';
+
+    if (!selectedText && tag !== 'clear') {
+      alert('💡 กรุณาลากคลุม (เลือกข้อความ) ที่ต้องการก่อน แล้วเลือกเครื่องมือเพื่อตั้งค่าและจัดรูปแบบตัวอักษรครับ');
+      textarea.focus();
+      return;
+    }
+
+    const dateStr = activeEditField.dateStr;
+    const type = activeEditField.type;
+
+    let newText = '';
+    if (tag === 'clear') {
+      if (selectedText) {
+        const cleanText = selectedText.replace(/\[\/?(color|bg|b|i|u)(=[^\]]*)?\]/gi, '');
+        newText = text.substring(0, start) + cleanText + text.substring(end);
+      } else {
+        newText = text.replace(/\[\/?(color|bg|b|i|u)(=[^\]]*)?\]/gi, '');
+      }
+    } else if (tag === 'color') {
+      newText = text.substring(0, start) + `[color=${param}]${selectedText}[/color]` + text.substring(end);
+    } else if (tag === 'bg') {
+      newText = text.substring(0, start) + `[bg=${param}]${selectedText}[/bg]` + text.substring(end);
+    } else {
+      newText = text.substring(0, start) + `[${tag}]${selectedText}[/${tag}]` + text.substring(end);
+    }
+
+    handleUpdateCompartmentNote(dateStr, type, newText);
+
+    setTimeout(() => {
+      textarea.focus();
+      if (tag === 'clear') {
+        if (selectedText) {
+          const cleanLen = selectedText.replace(/\[\/?(color|bg|b|i|u)(=[^\]]*)?\]/gi, '').length;
+          textarea.setSelectionRange(start, start + cleanLen);
+        } else {
+          textarea.setSelectionRange(0, newText.length);
+        }
+      } else {
+        const tagOffsetStart = (tag === 'color' || tag === 'bg') ? tag.length + param!.length + 2 : tag.length + 2;
+        textarea.setSelectionRange(start + tagOffsetStart, start + tagOffsetStart + selectedText.length);
+      }
+    }, 50);
+  };
+
   const [isResizing, setIsResizing] = useState<boolean>(false);
   const startResizeY = React.useRef<number>(0);
   const startHeight = React.useRef<number>(0);
@@ -749,55 +812,134 @@ export default function App() {
   const parseHighlighterText = (text: string, isWhiteTextOnActive: boolean) => {
     if (!text) return <span className="text-slate-400/85 italic text-[11px]">ไม่มีบันทึกสำหรับวันนี้...</span>;
 
-    const regex = /#(red|blue|green|yellow|pink|purple)\(([^)]+)\)/g;
-    const parts = [];
-    let lastIndex = 0;
-    let match;
+    // Backward compatibility converter: e.g. #red(content) -> [color=#ef4444]content[/color]
+    let converted = text;
+    const oldRegex = /#(red|blue|green|yellow|pink|purple)\(([^)]+)\)/g;
+    converted = converted.replace(oldRegex, (match, color, content) => {
+      let colorHex = '';
+      let bgHex = '';
+      if (color === 'red') colorHex = '#ef4444';
+      else if (color === 'blue') colorHex = '#3b82f6';
+      else if (color === 'green') colorHex = '#10b981';
+      else if (color === 'yellow') bgHex = '#fef08a';
+      else if (color === 'pink') bgHex = '#fbcfe8';
+      else if (color === 'purple') colorHex = '#8b5cf6';
+      
+      if (colorHex) return `[color=${colorHex}]${content}[/color]`;
+      if (bgHex) return `[bg=${bgHex}]${content}[/bg]`;
+      return content;
+    });
 
-    while ((match = regex.exec(text)) !== null) {
-      const matchIndex = match.index;
-      if (matchIndex > lastIndex) {
-        parts.push(text.substring(lastIndex, matchIndex));
-      }
-      const color = match[1];
-      const content = match[2];
-
-      let styleClass = '';
-      if (color === 'red') {
-        styleClass = isWhiteTextOnActive 
-          ? 'text-rose-105 font-extrabold underline decoration-rose-300' 
-          : 'text-rose-600 font-bold bg-rose-50 px-1 py-0.5 rounded border border-rose-100';
-      } else if (color === 'blue') {
-        styleClass = isWhiteTextOnActive 
-          ? 'text-indigo-150 font-extrabold underline decoration-indigo-350' 
-          : 'text-blue-600 font-bold bg-blue-50 px-1 py-0.5 rounded border border-blue-100';
-      } else if (color === 'green') {
-        styleClass = isWhiteTextOnActive 
-          ? 'text-emerald-100 font-extrabold underline decoration-emerald-300' 
-          : 'text-emerald-750 font-bold bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100';
-      } else if (color === 'yellow') {
-        styleClass = 'bg-yellow-200 text-slate-900 font-extrabold px-1.5 py-0.5 rounded shadow-xs';
-      } else if (color === 'pink') {
-        styleClass = 'bg-pink-200 text-slate-900 font-extrabold px-1.5 py-0.5 rounded shadow-xs';
-      } else if (color === 'purple') {
-        styleClass = isWhiteTextOnActive 
-          ? 'text-purple-100 font-extrabold underline decoration-purple-350' 
-          : 'text-purple-750 font-bold bg-purple-50 px-1 py-0.5 rounded border border-purple-100';
-      }
-
-      parts.push(
-        <span key={matchIndex} className={styleClass}>
-          {content}
-        </span>
-      );
-      lastIndex = regex.lastIndex;
+    // Helper AST parser inside:
+    interface TextASTNode {
+      type: 'text' | 'color' | 'bg' | 'b' | 'i' | 'u';
+      value?: string;
+      param?: string;
+      children: TextASTNode[];
     }
 
-    if (lastIndex < text.length) {
-      parts.push(text.substring(lastIndex));
-    }
+    let parseIndex = 0;
+    const parseToAST = (): TextASTNode[] => {
+      const nodes: TextASTNode[] = [];
+      
+      function parse(parentTagName: string | null = null): TextASTNode[] {
+        const currentChildren: TextASTNode[] = [];
+        
+        while (parseIndex < converted.length) {
+          if (converted[parseIndex] === '[') {
+            const tagCloseIndex = converted.indexOf(']', parseIndex);
+            if (tagCloseIndex !== -1) {
+              const tagContent = converted.substring(parseIndex + 1, tagCloseIndex);
+              
+              if (tagContent.startsWith('/')) {
+                const closingName = tagContent.slice(1).toLowerCase().split('=')[0];
+                if (closingName === parentTagName) {
+                  parseIndex = tagCloseIndex + 1;
+                  return currentChildren;
+                } else {
+                  currentChildren.push({ type: 'text', value: '[', children: [] });
+                  parseIndex++;
+                  continue;
+                }
+              }
 
-    return <div className="whitespace-pre-wrap break-words">{parts}</div>;
+              const parts = tagContent.split('=');
+              const tagName = parts[0].toLowerCase();
+              const param = parts[1] || '';
+
+              if (['color', 'bg', 'b', 'i', 'u'].includes(tagName)) {
+                parseIndex = tagCloseIndex + 1;
+                const node: TextASTNode = {
+                  type: tagName as any,
+                  param,
+                  children: parse(tagName)
+                };
+                currentChildren.push(node);
+                continue;
+              }
+            }
+          }
+
+          let nextSpecial = converted.indexOf('[', parseIndex);
+          if (nextSpecial === -1) {
+            nextSpecial = converted.length;
+          }
+          currentChildren.push({
+            type: 'text',
+            value: converted.substring(parseIndex, nextSpecial),
+            children: []
+          });
+          parseIndex = nextSpecial;
+        }
+
+        return currentChildren;
+      }
+
+      return parse(null);
+    };
+
+    const renderAST = (nodes: TextASTNode[], keyPrefix = 'rtf'): React.ReactNode[] => {
+      return nodes.map((node, i) => {
+        const key = `${keyPrefix}-${node.type}-${i}`;
+        switch (node.type) {
+          case 'text':
+            return <span key={key}>{node.value}</span>;
+          case 'b':
+            return <strong key={key} className="font-bold">{renderAST(node.children, key)}</strong>;
+          case 'i':
+            return <em key={key} className="italic">{renderAST(node.children, key)}</em>;
+          case 'u':
+            return <span key={key} className="underline">{renderAST(node.children, key)}</span>;
+          case 'color': {
+            const colorVal = node.param || 'inherit';
+            return (
+              <span key={key} style={{ color: colorVal }}>
+                {renderAST(node.children, key)}
+              </span>
+            );
+          }
+          case 'bg': {
+            const bgVal = node.param || 'transparent';
+            return (
+              <span 
+                key={key} 
+                style={{ backgroundColor: bgVal }} 
+                className="px-1 py-0.5 rounded-sm shadow-xs border border-black/5"
+              >
+                {renderAST(node.children, key)}
+              </span>
+            );
+          }
+          default:
+            return null;
+        }
+      });
+    };
+
+    const ast = parseToAST();
+    const rendered = renderAST(ast, 'rtf');
+
+    return <div className="whitespace-pre-wrap break-words leading-relaxed">{rendered}</div>;
   };
 
   // File Add / Remove hooks
@@ -1093,6 +1235,179 @@ export default function App() {
           {/* Time-Based Safety and Connection Status Container */}
           <div className="flex flex-wrap items-center gap-3 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/60 shadow-inner">
             
+            {/* MS Word Formatting Toolbar (Integrated into Corner) */}
+            <div 
+              className={`flex items-center gap-1 bg-white border p-1 rounded-xl shadow-xs transition-all duration-200 ${
+                activeEditField 
+                  ? 'border-indigo-300 ring-2 ring-indigo-150 ring-offset-1 opacity-100 scale-100' 
+                  : 'border-slate-200/60 opacity-60 hover:opacity-100 focus-within:opacity-100'
+              }`}
+              onMouseDown={(e) => {
+                e.preventDefault(); // Prevents losing focus from the textarea!
+              }}
+              title={activeEditField ? 'เครื่องมือจัดรูปแบบแบบ MS Word (พร้อมเลือกจัดรูปแบบข้อความแล้ว)' : 'เครื่องมือจัดรูปแบบตัวอักษร: คลิกปุ่มพิมพ์เพื่อเริ่มต้นใช้งาน'}
+            >
+              <div className="flex items-center gap-0.5">
+                {/* Bold */}
+                <button
+                  type="button"
+                  onClick={() => applyFormatting('b')}
+                  disabled={!activeEditField}
+                  className={`p-1 hover:bg-slate-100 rounded text-slate-700 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed`}
+                  title="ตัวหนา (B)"
+                >
+                  <Bold className="w-3.5 h-3.5" />
+                </button>
+
+                {/* Italic */}
+                <button
+                  type="button"
+                  onClick={() => applyFormatting('i')}
+                  disabled={!activeEditField}
+                  className={`p-1 hover:bg-slate-100 rounded text-slate-700 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed`}
+                  title="ตัวเอียง (I)"
+                >
+                  <Italic className="w-3.5 h-3.5" />
+                </button>
+
+                {/* Underline */}
+                <button
+                  type="button"
+                  onClick={() => applyFormatting('u')}
+                  disabled={!activeEditField}
+                  className={`p-1 hover:bg-slate-100 rounded text-slate-700 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed`}
+                  title="ขีดเส้นใต้ (U)"
+                >
+                  <Underline className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="w-[1px] h-3.5 bg-slate-200 mx-0.5 shrink-0" />
+
+              <div className="flex items-center gap-0.5">
+                {/* Font Color Picker Dropdown */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!activeEditField) return;
+                      setActiveFontColorDropdown(!activeFontColorDropdown);
+                      setActiveHighlightDropdown(false);
+                    }}
+                    disabled={!activeEditField}
+                    className={`p-1 hover:bg-slate-100 rounded text-slate-700 flex flex-col items-center gap-0.5 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed`}
+                    title="สีตัวอักษร (A)"
+                  >
+                    <div className="relative flex flex-col items-center leading-none">
+                      <span className="text-[10px] font-black select-none font-sans leading-none">A</span>
+                      <div className="w-2.5 h-[2.5px] bg-red-600 rounded-full mt-[-1px]"></div>
+                    </div>
+                  </button>
+                  {activeFontColorDropdown && activeEditField && (
+                    <div className="absolute right-0 top-full mt-2 bg-white border border-slate-200 rounded-xl shadow-xl p-2 grid grid-cols-4 gap-1 z-50 w-28 text-slate-800">
+                      {[
+                        { hex: '#ef4444', label: 'แดง' },
+                        { hex: '#3b82f6', label: 'น้ำเงิน' },
+                        { hex: '#10b981', label: 'เขียว' },
+                        { hex: '#8b5cf6', label: 'ม่วง' },
+                        { hex: '#f97316', label: 'ส้ม' },
+                        { hex: '#1e293b', label: 'ดำ' },
+                        { hex: '#ec4899', label: 'ชมพู' },
+                        { hex: '#1d4ed8', label: 'น้ำเงินเข้ม' }
+                      ].map(col => (
+                        <button
+                          key={col.hex}
+                          type="button"
+                          onClick={() => {
+                            applyFormatting('color', col.hex);
+                            setActiveFontColorDropdown(false);
+                          }}
+                          className="w-5 h-5 rounded-full border border-slate-205 transition-all hover:scale-110 active:scale-95 cursor-pointer"
+                          style={{ backgroundColor: col.hex }}
+                          title={col.label}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Highlight/Background Picker Dropdown */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!activeEditField) return;
+                      setActiveHighlightDropdown(!activeHighlightDropdown);
+                      setActiveFontColorDropdown(false);
+                    }}
+                    disabled={!activeEditField}
+                    className={`p-1 hover:bg-slate-100 rounded text-slate-700 flex flex-col items-center gap-0.5 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed`}
+                    title="สีไฮไลท์ข้อความ (Highlight)"
+                  >
+                    <div className="relative flex flex-col items-center leading-none">
+                      <Highlighter className="w-3.5 h-3.5 text-slate-700" />
+                      <div className="w-2.5 h-[2.5px] bg-yellow-450 rounded-full mt-[-1px]"></div>
+                    </div>
+                  </button>
+                  {activeHighlightDropdown && activeEditField && (
+                    <div className="absolute right-0 top-full mt-2 bg-white border border-slate-200 rounded-xl shadow-xl p-2 grid grid-cols-4 gap-1 z-50 w-28 text-slate-800">
+                      {[
+                        { hex: '#fef08a', label: 'เหลือง' },
+                        { hex: '#bbf7d0', label: 'เขียวอ่อน' },
+                        { hex: '#bfdbfe', label: 'ฟ้าอ่อน' },
+                        { hex: '#fbcfe8', label: 'ชมพูอ่อน' },
+                        { hex: '#e9d5ff', label: 'ม่วงอ่อน' },
+                        { hex: '#fed7aa', label: 'ส้มอ่อน' },
+                        { hex: '#fca5a5', label: 'แดงอ่อน' },
+                        { hex: '#ffffff', label: 'ไม่มีไฮไลท์' }
+                      ].map(col => (
+                        <button
+                          key={col.hex}
+                          type="button"
+                          onClick={() => {
+                            if (col.hex === '#ffffff') {
+                              applyFormatting('clear');
+                            } else {
+                              applyFormatting('bg', col.hex);
+                            }
+                            setActiveHighlightDropdown(false);
+                          }}
+                          className="w-5 h-5 rounded border border-slate-205 transition-all hover:scale-110 active:scale-95 cursor-pointer"
+                          style={{ backgroundColor: col.hex }}
+                          title={col.label}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="w-[1px] h-3.5 bg-slate-200 mx-0.5 shrink-0" />
+
+              {/* Clear format (Eraser) */}
+              <button
+                type="button"
+                onClick={() => applyFormatting('clear')}
+                disabled={!activeEditField}
+                className={`p-1 hover:bg-rose-50 rounded transition cursor-pointer ${
+                  activeEditField ? 'text-rose-500 hover:text-rose-600' : 'text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed'
+                }`}
+                title="ล้างการจัดรูปแบบอักษร (Clear Formatting)"
+              >
+                <Eraser className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Status active pulse dot */}
+              {activeEditField && (
+                <span className="flex h-1.5 w-1.5 relative mr-1 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-duration-1000"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                </span>
+              )}
+            </div>
+
+            <div className="w-[1px] h-5 bg-slate-200/80 mx-1 hidden sm:block shrink-0" />
+
             {/* Google Authentication / Simulation Status Badge */}
             {fbUser ? (
               <div className="flex items-center gap-2 text-xs text-emerald-850 bg-emerald-50/95 py-1.5 px-3 rounded-xl border border-emerald-250/60 shadow-xs">
@@ -1444,7 +1759,7 @@ export default function App() {
                           addAuditLog(`เลือกวันที่: ${item.dayLabel}`);
                         }}
                         style={{ height: `${calendarCardHeight}px` }}
-                        className={`flex flex-col border rounded-xl font-medium transition-all duration-150 text-xs cursor-pointer relative overflow-hidden select-none ${
+                        className={`flex flex-col border rounded-xl font-medium transition-all duration-150 text-xs cursor-pointer relative overflow-hidden select-none calendar-day-cell ${
                           isSelected ? 'ring-2 ring-indigo-250 border-indigo-500' : ''
                         } ${cellBg} ${cellBorder}`}
                       >
@@ -1488,58 +1803,83 @@ export default function App() {
                           {/* Morning Content Area */}
                           <div className="p-2 flex-grow overflow-y-auto space-y-1 min-h-0 bg-white flex flex-col justify-between">
                             {/* Morning Slots list */}
-                            <div className="space-y-1">
-                              {daySched.morningNote && (
-                                <div 
-                                  style={{ fontSize: `${calendarFontSize * 0.95}px` }}
-                                  className="p-1 px-1.5 rounded-md bg-amber-50/40 border border-amber-100/30 text-slate-700 leading-normal mb-1 bg-gradient-to-r from-amber-50/60 to-orange-50/20"
-                                >
-                                  {parseHighlighterText(daySched.morningNote, isSelected)}
-                                </div>
-                              )}
-                              {morningSlots.map(([hr, avails]) => {
-                                const activeAvails = avails.filter(av => av.status !== 'none');
-                                if (activeAvails.length === 0) return null;
-                                return (
-                                  <div key={hr} className="flex flex-col gap-0.5 border-b border-slate-50 pb-0.5 last:border-0" onClick={(e) => e.stopPropagation()}>
-                                    <span 
-                                      style={{ fontSize: `${calendarFontSize * 0.9}px` }}
-                                      className="font-bold text-slate-500 font-mono"
-                                    >
-                                      {hr} น. :
-                                    </span>
-                                    <div className="flex flex-wrap gap-0.5">
-                                      {activeAvails.map(av => (
-                                        <span 
-                                          key={av.userId} 
-                                          style={{ fontSize: `${calendarFontSize * 0.8}px` }}
-                                          className={`px-1 py-0.2 rounded-sm ${
-                                            av.status === 'available' 
-                                              ? 'bg-emerald-50 text-emerald-700' 
-                                              : 'bg-rose-50 text-rose-600 line-through decoration-slate-400'
-                                          }`}
-                                          title={av.note || ''}
-                                        >
-                                          {av.userName}{av.note ? ` (${av.note})` : ''}
-                                        </span>
-                                      ))}
+                            <div className="space-y-1 flex-1 flex flex-col justify-between">
+                              <div className="space-y-1">
+                                {morningSlots.map(([hr, avails]) => {
+                                  const activeAvails = avails.filter(av => av.status !== 'none');
+                                  if (activeAvails.length === 0) return null;
+                                  return (
+                                    <div key={hr} className="flex flex-col gap-0.5 border-b border-slate-50 pb-0.5 last:border-0" onClick={(e) => e.stopPropagation()}>
+                                      <span 
+                                        style={{ fontSize: `${calendarFontSize * 0.9}px` }}
+                                        className="font-bold text-slate-500 font-mono"
+                                      >
+                                        {hr} น. :
+                                      </span>
+                                      <div className="flex flex-wrap gap-0.5">
+                                        {activeAvails.map(av => (
+                                          <span 
+                                            key={av.userId} 
+                                            style={{ fontSize: `${calendarFontSize * 0.8}px` }}
+                                            className={`px-1 py-0.2 rounded-sm ${
+                                              av.status === 'available' 
+                                                ? 'bg-emerald-50 text-emerald-700' 
+                                                : 'bg-rose-50 text-rose-600 line-through decoration-slate-400'
+                                            }`}
+                                            title={av.note || ''}
+                                          >
+                                            {av.userName}{av.note ? ` (${av.note})` : ''}
+                                          </span>
+                                        ))}
+                                      </div>
                                     </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                                  );
+                                })}
+                              </div>
 
-                            {/* Direct Note Typing area for Morning Compartment */}
-                            <div className="mt-1 pt-1 border-t border-slate-100" onClick={(e) => e.stopPropagation()}>
-                              <textarea
-                                value={daySched.morningNote || ''}
-                                onChange={(e) => handleUpdateCompartmentNote(curDateStr, 'morning', e.target.value)}
-                                placeholder="ไม่มีนัดช่วงเช้า / พิมพ์บันทึก..."
-                                disabled={isLocked}
-                                rows={2}
-                                style={{ fontSize: `${calendarFontSize * 0.9}px` }}
-                                className={`w-full p-1 rounded-md border border-slate-100 bg-slate-50/50 text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-1 focus:ring-indigo-500/20 resize-none focus:outline-none transition-all ${isLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
-                              />
+                              {/* Interactive Inline Note Area (No border/box, type directly!) */}
+                              <div 
+                                className="flex-grow flex flex-col mt-1"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveEditField({ dateStr: curDateStr, type: 'morning' });
+                                }}
+                              >
+                                {activeEditField?.dateStr === curDateStr && activeEditField?.type === 'morning' ? (
+                                  <textarea
+                                    id={`textarea-morning-${curDateStr}`}
+                                    value={daySched.morningNote || ''}
+                                    autoFocus
+                                    onBlur={() => {
+                                      setTimeout(() => {
+                                        setActiveEditField(null);
+                                        setActiveFontColorDropdown(false);
+                                        setActiveHighlightDropdown(false);
+                                      }, 180);
+                                    }}
+                                    onChange={(e) => handleUpdateCompartmentNote(curDateStr, 'morning', e.target.value)}
+                                    placeholder="พิมพ์บันทึกช่วงเช้าตรงนี้..."
+                                    disabled={isLocked}
+                                    rows={3}
+                                    style={{ fontSize: `${calendarFontSize * 0.9}px` }}
+                                    className={`w-full min-h-[48px] p-1 px-1.5 border-0 bg-transparent text-slate-800 placeholder:text-slate-300/80 resize-none focus:outline-none focus:ring-0 ${isLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                ) : (
+                                  <div 
+                                    className="p-1 flex-grow cursor-text hover:bg-slate-50/40 rounded transition-colors duration-100 min-h-[24px]"
+                                    style={{ fontSize: `${calendarFontSize * 0.9}px` }}
+                                  >
+                                    {daySched.morningNote ? (
+                                      <div className="p-1 px-1.5 rounded-md bg-amber-50/40 border border-amber-100/30 text-slate-700 leading-normal bg-gradient-to-r from-amber-50/60 to-orange-50/20">
+                                        {parseHighlighterText(daySched.morningNote, isSelected)}
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-300/80 italic select-none text-[8.5px]">+ พิมพ์บันทึกช่วงเช้า...</span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -1583,49 +1923,7 @@ export default function App() {
                            {/* Afternoon Content Area */}
                           <div className="p-2 flex-grow overflow-y-auto space-y-1 min-h-0 flex flex-col justify-between">
                             {/* Afternoon Slots list */}
-                            <div className="space-y-1">
-                              {daySched.afternoonNote && (
-                                <div 
-                                  style={{ fontSize: `${calendarFontSize * 0.95}px` }}
-                                  className="p-1 px-1.5 rounded-md bg-amber-50/40 border border-amber-100/30 text-slate-700 leading-normal mb-1 bg-gradient-to-r from-amber-50/60 to-orange-50/20"
-                                >
-                                  {parseHighlighterText(daySched.afternoonNote, isSelected)}
-                                </div>
-                              )}
-                              {afternoonSlots.map(([hr, avails]) => {
-                                const activeAvails = avails.filter(av => av.status !== 'none');
-                                if (activeAvails.length === 0) return null;
-                                return (
-                                  <div key={hr} className="flex flex-col gap-0.5 border-b border-slate-50 pb-0.5 last:border-0" onClick={(e) => e.stopPropagation()}>
-                                    <span 
-                                      style={{ fontSize: `${calendarFontSize * 0.9}px` }}
-                                      className="font-bold text-slate-500 font-mono"
-                                    >
-                                      {hr} น. :
-                                    </span>
-                                    <div className="flex flex-wrap gap-0.5">
-                                      {activeAvails.map(av => (
-                                        <span 
-                                          key={av.userId} 
-                                          style={{ fontSize: `${calendarFontSize * 0.8}px` }}
-                                          className={`px-1 py-0.2 rounded-sm ${
-                                            av.status === 'available' 
-                                              ? 'bg-emerald-50 text-emerald-700' 
-                                              : 'bg-rose-50 text-rose-600 line-through decoration-slate-400'
-                                          }`}
-                                          title={av.note || ''}
-                                        >
-                                          {av.userName}{av.note ? ` (${av.note})` : ''}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-
-                            {/* Direct Note Typing area for Afternoon Compartment */}
-                            <div className="mt-1 pt-1 border-t border-slate-100" onClick={(e) => e.stopPropagation()}>
+                            <div className="space-y-1 flex-1 flex flex-col justify-between p-0.5">
                               {daySched.dailyNote && (
                                 <p 
                                   style={{ fontSize: `${calendarFontSize * 0.8}px` }}
@@ -1634,15 +1932,83 @@ export default function App() {
                                   📝 โน้ตเดิม: {daySched.dailyNote}
                                 </p>
                               )}
-                              <textarea
-                                value={daySched.afternoonNote || ''}
-                                onChange={(e) => handleUpdateCompartmentNote(curDateStr, 'afternoon', e.target.value)}
-                                placeholder="ไม่มีนัดช่วงบ่าย / พิมพ์บันทึก..."
-                                disabled={isLocked}
-                                rows={2}
-                                style={{ fontSize: `${calendarFontSize * 0.9}px` }}
-                                className={`w-full p-1 rounded-md border border-slate-100 bg-slate-50/50 text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-1 focus:ring-indigo-500/20 resize-none focus:outline-none transition-all ${isLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
-                              />
+
+                              <div className="space-y-1">
+                                {afternoonSlots.map(([hr, avails]) => {
+                                  const activeAvails = avails.filter(av => av.status !== 'none');
+                                  if (activeAvails.length === 0) return null;
+                                  return (
+                                    <div key={hr} className="flex flex-col gap-0.5 border-b border-slate-50 pb-0.5 last:border-0" onClick={(e) => e.stopPropagation()}>
+                                      <span 
+                                        style={{ fontSize: `${calendarFontSize * 0.9}px` }}
+                                        className="font-bold text-slate-500 font-mono"
+                                      >
+                                        {hr} น. :
+                                      </span>
+                                      <div className="flex flex-wrap gap-0.5">
+                                        {activeAvails.map(av => (
+                                          <span 
+                                            key={av.userId} 
+                                            style={{ fontSize: `${calendarFontSize * 0.8}px` }}
+                                            className={`px-1 py-0.2 rounded-sm ${
+                                              av.status === 'available' 
+                                                ? 'bg-emerald-50 text-emerald-700' 
+                                                : 'bg-rose-50 text-rose-600 line-through decoration-slate-400'
+                                            }`}
+                                            title={av.note || ''}
+                                          >
+                                            {av.userName}{av.note ? ` (${av.note})` : ''}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Interactive Inline Note Area (No border/box, type directly!) */}
+                              <div 
+                                className="flex-grow flex flex-col mt-1"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveEditField({ dateStr: curDateStr, type: 'afternoon' });
+                                }}
+                              >
+                                {activeEditField?.dateStr === curDateStr && activeEditField?.type === 'afternoon' ? (
+                                  <textarea
+                                    id={`textarea-afternoon-${curDateStr}`}
+                                    value={daySched.afternoonNote || ''}
+                                    autoFocus
+                                    onBlur={() => {
+                                      setTimeout(() => {
+                                        setActiveEditField(null);
+                                        setActiveFontColorDropdown(false);
+                                        setActiveHighlightDropdown(false);
+                                      }, 180);
+                                    }}
+                                    onChange={(e) => handleUpdateCompartmentNote(curDateStr, 'afternoon', e.target.value)}
+                                    placeholder="พิมพ์บันทึกช่วงบ่ายตรงนี้..."
+                                    disabled={isLocked}
+                                    rows={3}
+                                    style={{ fontSize: `${calendarFontSize * 0.9}px` }}
+                                    className={`w-full min-h-[48px] p-1 px-1.5 border-0 bg-transparent text-slate-800 placeholder:text-slate-300/80 resize-none focus:outline-none focus:ring-0 ${isLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                ) : (
+                                  <div 
+                                    className="p-1 flex-grow cursor-text hover:bg-slate-50/40 rounded transition-colors duration-100 min-h-[24px]"
+                                    style={{ fontSize: `${calendarFontSize * 0.9}px` }}
+                                  >
+                                    {daySched.afternoonNote ? (
+                                      <div className="p-1 px-1.5 rounded-md bg-amber-50/40 border border-amber-100/30 text-slate-700 leading-normal bg-gradient-to-r from-amber-50/60 to-orange-50/20">
+                                        {parseHighlighterText(daySched.afternoonNote, isSelected)}
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-300/80 italic select-none text-[8.5px]">+ พิมพ์บันทึกช่วงบ่าย...</span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>

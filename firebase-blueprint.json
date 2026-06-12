@@ -50,9 +50,26 @@
         "gasUrl": { "type": "string", "description": "Google Sheets dynamic sync webapp URL" }
       },
       "required": ["gasUrl"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile metadata of executives/secretaries participating in the scheduling",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique user/slug identifier" },
+        "name": { "type": "string", "description": "Short display name or initials of the user" },
+        "fullName": { "type": "string", "description": "Full name of the user" },
+        "role": { "type": "string", "enum": ["executive", "secretary"], "description": "Profile role" },
+        "avatarColor": { "type": "string", "description": "Hex color code for the user card/avatar" }
+      },
+      "required": ["id", "name", "fullName", "role", "avatarColor"]
     }
   },
   "firestore": {
+    "users_profile/{userId}": {
+      "schema": "UserProfile",
+      "description": "Profiles list of team members and executives"
+    },
     "schedules/{dateString}": {
       "schema": "DaySchedule",
       "description": "Primary store of active scheduling calendars segmented by a primary date index"

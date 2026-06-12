@@ -54,7 +54,23 @@ service cloud.firestore {
         && data.gasUrl is string && data.gasUrl.size() <= 2048;
     }
 
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['id', 'name', 'fullName', 'role', 'avatarColor'])
+        && data.keys().size() == 5
+        && data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 64
+        && data.fullName is string && data.fullName.size() <= 256
+        && data.role is string && (data.role == 'executive' || data.role == 'secretary')
+        && data.avatarColor is string && data.avatarColor.size() <= 32;
+    }
+
     // --- Router and Path Rules ---
+
+    match /users_profile/{userId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isVerified() && isValidUserProfile(incoming()) && isValidId(userId);
+      allow delete: if isVerified() && isValidId(userId);
+    }
 
     match /schedules/{dateString} {
       allow get, list: if isSignedIn();
