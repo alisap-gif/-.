@@ -125,6 +125,7 @@ export default function App() {
   
   // Custom height resizer for Google Doc feel
   const [calendarCardHeight, setCalendarCardHeight] = useState<number>(310);
+  const [calendarWidth, setCalendarWidth] = useState<number>(1280);
   const [calendarFontSize, setCalendarFontSize] = useState<number>(10);
   const [activeEditField, setActiveEditField] = useState<{ dateStr: string; type: 'morning' | 'afternoon' } | null>(null);
   const [activeFontColorDropdown, setActiveFontColorDropdown] = useState<boolean>(false);
@@ -1209,7 +1210,10 @@ export default function App() {
       
       {/* Main Navigation Header with Sleek Interface brand guidelines */}
       <header className="bg-white/80 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-40 px-4 lg:px-8 py-4 shadow-sm">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-5">
+        <div 
+          className="mx-auto flex flex-col md:flex-row items-center justify-between gap-5 w-full transition-all duration-300"
+          style={{ maxWidth: calendarWidth === 1920 ? '100%' : `${calendarWidth}px` }}
+        >
           
           {/* Logo & Headline */}
           <div className="flex items-center gap-3.5">
@@ -1461,7 +1465,10 @@ export default function App() {
       </header>
 
       {/* Main Container - Dashboard Area */}
-      <main className="flex-grow p-4 lg:p-8 max-w-7xl mx-auto w-full grid grid-cols-1 gap-6">
+      <main 
+        className="flex-grow p-4 lg:p-8 mx-auto w-full grid grid-cols-1 gap-6 transition-all duration-300"
+        style={{ maxWidth: calendarWidth === 1920 ? '100%' : `${calendarWidth}px` }}
+      >
 
         {/* Tab Controls for system */}
         <div className="flex border-b border-slate-200/80 gap-1.5 overflow-x-auto scroller-hidden">
@@ -1586,7 +1593,50 @@ export default function App() {
                   </div>
 
                   {/* Responsive Elegant Calendar Control Box */}
-                  <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto shrink-0">
+                  <div className="flex flex-col sm:flex-row flex-wrap lg:flex-nowrap gap-4 w-full lg:w-auto shrink-0">
+                    {/* Responsive Elegant Calendar Width Slider */}
+                    <div className="flex flex-col gap-1.5 w-full sm:w-56 lg:w-56">
+                      <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
+                        <span className="flex items-center gap-1 font-sans">
+                          <Sliders className="w-3.5 h-3.5 text-indigo-500" />
+                          ปรับความกว้างตาราง
+                        </span>
+                        <span className="font-mono text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                          {calendarWidth === 1920 ? 'เต็มจอ (100%)' : `${calendarWidth}px`}
+                        </span>
+                      </div>
+                      <div className="relative w-full h-5 flex items-center">
+                        <div className="w-full h-1.5 bg-slate-100 rounded-full"></div>
+                        <div 
+                          style={{ width: `${((calendarWidth - 1000) / (1920 - 1000)) * 100}%` }}
+                          className="absolute h-1.5 bg-indigo-500 rounded-full left-0 pointer-events-none"
+                        ></div>
+                        <div 
+                          style={{ left: `calc(${((calendarWidth - 1000) / (1920 - 1000)) * 100}% - 6px)` }}
+                          className="absolute w-3 h-4 bg-indigo-600 rounded-sm border border-white cursor-ew-resize flex items-center justify-center shadow-md hover:bg-indigo-700 hover:scale-105 active:bg-indigo-800 transition-transform duration-75 pointer-events-none"
+                          title="คลิกลากซ้ายขวาเพื่อคุมความกว้าง"
+                        >
+                          <div className="w-[1px] h-2 bg-white"></div>
+                        </div>
+                        <input
+                          type="range"
+                          min="1000"
+                          max="1920"
+                          value={calendarWidth}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setCalendarWidth(val);
+                          }}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                      </div>
+                      <div className="text-[9px] text-slate-400 font-sans flex justify-between select-none">
+                        <span>1000px</span>
+                        <span className="italic text-indigo-400">ขนาดหน้ากระดาษ</span>
+                        <span>1920px (เต็มจอ)</span>
+                      </div>
+                    </div>
+
                     {/* Responsive Elegant Calendar Height Slider */}
                     <div className="flex flex-col gap-1.5 w-full sm:w-56 lg:w-56">
                       <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
@@ -2059,7 +2109,10 @@ export default function App() {
 
       {/* Modern, minimalist and humble footer */}
       <footer className="bg-white border-t border-slate-200 mt-16 py-8 px-4 lg:px-8 text-center" id="app-footer">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-400 font-sans">
+        <div 
+          className="mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-400 font-sans w-full transition-all duration-300"
+          style={{ maxWidth: calendarWidth === 1920 ? '100%' : `${calendarWidth}px` }}
+        >
           <p>© ระบบตารางนัดทีม วก. ประจำปีการศึกษา 2570 • ออกแบบเพื่อให้เกิดเสถียรภาพและความโปร่งใสสูงสุด</p>
           <div className="flex items-center gap-3">
             <span className="text-indigo-650 bg-indigo-50/50 border border-indigo-150 py-1 px-3 rounded-full font-bold font-display">• Spark Free Tier (Google Sheets Cloud Data Warehouse)</span>
